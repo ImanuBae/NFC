@@ -13,3 +13,8 @@ This document records decisions made when specs are ambiguous or when technical 
 
 ### 3. Min SDK
 - Explicitly set Android `minSdk = 23` in `android/app/build.gradle.kts` as required in Section 2.
+
+### 4. NFC Package Pinning & RPC Abstraction
+- Pinned `nfc_manager: 3.3.0` for reliable Android NFC session handling and direct `tag.data` map access.
+- Extracted `KioskRpcService` interface for `record_scan` RPC calls, decoupling `ScanCoordinator` logic from Postgrest SDK internals and enabling pure Dart unit tests.
+
