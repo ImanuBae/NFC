@@ -15,7 +15,9 @@ import 'fake_scan_dialog.dart';
 import 'kiosk_pin_dialog.dart';
 import 'kiosk_result_view.dart';
 import 'nfc_service.dart';
+import 'pending_scan_store.dart';
 import 'scan_coordinator.dart';
+import 'sync_service.dart';
 
 class KioskIdlePage extends ConsumerStatefulWidget {
   const KioskIdlePage({super.key});
@@ -206,22 +208,41 @@ class _KioskIdlePageState extends ConsumerState<KioskIdlePage> {
             Positioned(
               top: 16,
               left: 16,
-              child: Row(
-                children: [
-                  Container(
-                    width: 12,
-                    height: 12,
-                    decoration: const BoxDecoration(
-                      color: Colors.green,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    S.onlineStatus,
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-                  ),
-                ],
+              child: Builder(
+                builder: (context) {
+                  final isOnline =
+                      ref.watch(isOnlineStreamProvider).value ?? true;
+                  final pendingCount =
+                      ref.watch(pendingCountProvider).value ?? 0;
+                  final statusText = isOnline
+                      ? (pendingCount > 0
+                            ? '${S.onlineStatus} ($pendingCount chờ đồng bộ)'
+                            : S.onlineStatus)
+                      : (pendingCount > 0
+                            ? '${S.offlineStatus} ($pendingCount chờ đồng bộ)'
+                            : S.offlineStatus);
+
+                  return Row(
+                    children: [
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: isOnline ? Colors.green : Colors.amber[700],
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        statusText,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
             if (!_nfcAvailable)

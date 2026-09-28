@@ -8,6 +8,7 @@ import '../../core/result.dart';
 import '../../core/supabase_client.dart';
 import '../../core/uid.dart';
 import 'device_config.dart';
+import 'pending_scan_store.dart';
 
 abstract class OfflineScanQueue {
   Future<void> enqueue({
@@ -139,5 +140,10 @@ final kioskRpcServiceProvider = Provider<KioskRpcService>((ref) {
 final scanCoordinatorProvider = Provider<ScanCoordinator>((ref) {
   final rpcService = ref.watch(kioskRpcServiceProvider);
   final deviceConfig = ref.watch(deviceConfigProvider);
-  return ScanCoordinator(rpcService: rpcService, deviceConfig: deviceConfig);
+  final store = ref.watch(pendingScanStoreProvider);
+  return ScanCoordinator(
+    rpcService: rpcService,
+    deviceConfig: deviceConfig,
+    offlineQueue: store,
+  );
 });
