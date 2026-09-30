@@ -197,6 +197,43 @@ class _MyHistoryPageState extends ConsumerState<MyHistoryPage> {
               );
             },
           ),
+          Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.schedule, color: theme.colorScheme.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Ca làm việc: 09:00 - 18:00',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        Text(
+                          'Vào ca sau 09:00: Đi trễ • Tan ca trước 18:00: Về sớm',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           Text(
             'Lịch sử quẹt thẻ gần đây',
             style: theme.textTheme.titleMedium?.copyWith(
@@ -248,17 +285,22 @@ class _MyHistoryPageState extends ConsumerState<MyHistoryPage> {
                   final timeStr = DateFormat('HH:mm:ss').format(ev.occurredAt);
                   final dateStr = DateFormat('dd/MM/yyyy').format(ev.occurredAt);
 
+                  final isLate = isCheckIn &&
+                      (ev.occurredAt.hour > 9 ||
+                          (ev.occurredAt.hour == 9 && ev.occurredAt.minute > 0));
+                  final isEarlyLeave = !isCheckIn && (ev.occurredAt.hour < 18);
+
                   return Card(
                     child: ListTile(
                       leading: CircleAvatar(
                         backgroundColor: isCheckIn
-                            ? Colors.green[100]
-                            : Colors.blue[100],
+                            ? (isLate ? Colors.orange[100] : Colors.green[100])
+                            : (isEarlyLeave ? Colors.amber[100] : Colors.blue[100]),
                         child: Icon(
                           isCheckIn ? Icons.login : Icons.logout,
                           color: isCheckIn
-                              ? Colors.green[800]
-                              : Colors.blue[800],
+                              ? (isLate ? Colors.orange[800] : Colors.green[800])
+                              : (isEarlyLeave ? Colors.amber[800] : Colors.blue[800]),
                         ),
                       ),
                       title: Text(
@@ -266,13 +308,65 @@ class _MyHistoryPageState extends ConsumerState<MyHistoryPage> {
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: isCheckIn
-                              ? Colors.green[800]
-                              : Colors.blue[800],
+                              ? (isLate ? Colors.orange[800] : Colors.green[800])
+                              : (isEarlyLeave ? Colors.amber[900] : Colors.blue[800]),
                         ),
                       ),
                       subtitle: Text('$timeStr • $dateStr'),
-                      trailing: ev.isVoided
-                          ? const Chip(
+                      trailing: Wrap(
+                        spacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (isLate)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.orange[100],
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'Đi trễ',
+                                style: TextStyle(
+                                  color: Colors.orange[900],
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          else if (isEarlyLeave)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.amber[100],
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'Về sớm',
+                                style: TextStyle(
+                                  color: Colors.amber[900],
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          else
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.green[50],
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'Đúng giờ',
+                                style: TextStyle(
+                                  color: Colors.green[800],
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          if (ev.isVoided)
+                            const Chip(
                               label: Text(
                                 'Đã hủy',
                                 style: TextStyle(
@@ -282,18 +376,9 @@ class _MyHistoryPageState extends ConsumerState<MyHistoryPage> {
                               ),
                               backgroundColor: Color(0xFFFFEBEE),
                               padding: EdgeInsets.zero,
-                            )
-                          : const Chip(
-                              label: Text(
-                                'Hợp lệ',
-                                style: TextStyle(
-                                  color: Colors.green,
-                                  fontSize: 11,
-                                ),
-                              ),
-                              backgroundColor: Color(0xFFE8F5E9),
-                              padding: EdgeInsets.zero,
                             ),
+                        ],
+                      ),
                     ),
                   );
                 },

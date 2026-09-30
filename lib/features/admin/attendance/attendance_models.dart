@@ -8,6 +8,7 @@ class DayReportItem {
   final int workedMinutes;
   final bool missingCheckout;
   final bool isLate;
+  final bool isEarlyLeave;
 
   DayReportItem({
     required this.employeeId,
@@ -19,6 +20,7 @@ class DayReportItem {
     required this.workedMinutes,
     required this.missingCheckout,
     required this.isLate,
+    this.isEarlyLeave = false,
   });
 
   String get workedDurationFormatted {
@@ -55,6 +57,7 @@ class DayReportItem {
       workedMinutes: (json['worked_minutes'] as num?)?.toInt() ?? 0,
       missingCheckout: json['missing_checkout'] as bool? ?? false,
       isLate: json['is_late'] as bool? ?? false,
+      isEarlyLeave: json['is_early_leave'] as bool? ?? false,
     );
   }
 }

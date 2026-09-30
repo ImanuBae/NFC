@@ -18,16 +18,24 @@ class KioskResultView extends StatelessWidget {
 
     switch (result) {
       case ScanOk ok:
+        final localAt = ok.at.toLocal();
+        final timeFormatted = DateFormat('HH:mm:ss').format(localAt);
         if (ok.isCheckIn) {
-          backgroundColor = const Color(0xFF2E7D32); // Green
+          final isLate = localAt.hour > 9 || (localAt.hour == 9 && localAt.minute > 0);
+          backgroundColor = isLate ? const Color(0xFFE65100) : const Color(0xFF2E7D32); // Orange if late, green if on time
           icon = Icons.login_rounded;
           title = '${S.welcomePrefix}${ok.name}';
-          subtitle = DateFormat('HH:mm:ss').format(ok.at);
+          subtitle = isLate
+              ? 'Vào ca: $timeFormatted (Đi trễ > 09:00)'
+              : 'Vào ca: $timeFormatted (Đúng giờ)';
         } else {
-          backgroundColor = const Color(0xFF1565C0); // Blue
+          final isEarlyLeave = localAt.hour < 18;
+          backgroundColor = isEarlyLeave ? const Color(0xFFE65100) : const Color(0xFF1565C0); // Orange if early, blue if normal
           icon = Icons.logout_rounded;
           title = '${S.goodbyePrefix}${ok.name}';
-          subtitle = DateFormat('HH:mm:ss').format(ok.at);
+          subtitle = isEarlyLeave
+              ? 'Ra ca: $timeFormatted (Về sớm < 18:00)'
+              : 'Ra ca: $timeFormatted (Đúng giờ)';
         }
         break;
       case ScanRejected _:

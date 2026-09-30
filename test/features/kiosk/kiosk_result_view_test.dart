@@ -22,13 +22,32 @@ void main() {
     await tester.pumpWidget(buildWidget(result));
 
     expect(find.text('${S.welcomePrefix}Nguyen Van A'), findsOneWidget);
-    expect(find.text('08:30:00'), findsOneWidget);
+    expect(find.text('Vào ca: 08:30:00 (Đúng giờ)'), findsOneWidget);
 
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
     expect(scaffold.backgroundColor, equals(const Color(0xFF2E7D32)));
   });
 
-  testWidgets('displays check-out with blue background and goodbye message', (
+  testWidgets('displays check-out on time with blue background and goodbye message', (
+    tester,
+  ) async {
+    final result = ScanOk(
+      isCheckIn: false,
+      name: 'Tran Thi B',
+      code: 'NV02',
+      at: DateTime(2026, 9, 28, 18, 30, 0),
+    );
+
+    await tester.pumpWidget(buildWidget(result));
+
+    expect(find.text('${S.goodbyePrefix}Tran Thi B'), findsOneWidget);
+    expect(find.text('Ra ca: 18:30:00 (Đúng giờ)'), findsOneWidget);
+
+    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+    expect(scaffold.backgroundColor, equals(const Color(0xFF1565C0)));
+  });
+
+  testWidgets('displays check-out early leave with orange background and early leave message', (
     tester,
   ) async {
     final result = ScanOk(
@@ -41,10 +60,10 @@ void main() {
     await tester.pumpWidget(buildWidget(result));
 
     expect(find.text('${S.goodbyePrefix}Tran Thi B'), findsOneWidget);
-    expect(find.text('17:30:00'), findsOneWidget);
+    expect(find.text('Ra ca: 17:30:00 (Về sớm < 18:00)'), findsOneWidget);
 
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-    expect(scaffold.backgroundColor, equals(const Color(0xFF1565C0)));
+    expect(scaffold.backgroundColor, equals(const Color(0xFFE65100)));
   });
 
   testWidgets(

@@ -162,7 +162,7 @@ class DayReportPage extends ConsumerWidget {
                                     ),
                                   ],
                                 ),
-                                if (item.isLate || item.missingCheckout) ...[
+                                if (item.isLate || item.isEarlyLeave || item.missingCheckout) ...[
                                   const SizedBox(height: 10),
                                   Wrap(
                                     spacing: 8,
@@ -183,6 +183,27 @@ class DayReportPage extends ConsumerWidget {
                                             S.lateBadge,
                                             style: TextStyle(
                                               color: Colors.orange[900],
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                      if (item.isEarlyLeave)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.amber[100],
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'Về sớm (< 18:00)',
+                                            style: TextStyle(
+                                              color: Color(0xFFB78103),
                                               fontSize: 12,
                                               fontWeight: FontWeight.bold,
                                             ),
