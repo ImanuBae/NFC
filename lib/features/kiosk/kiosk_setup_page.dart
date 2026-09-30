@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/strings.dart';
 import '../../core/supabase_client.dart';
@@ -44,7 +45,7 @@ class _KioskSetupPageState extends ConsumerState<KioskSetupPage> {
 
       // Reload/redirect will take user to /kiosk
       if (mounted) {
-        Navigator.of(context).pushReplacementNamed('/kiosk');
+        context.go('/kiosk');
       }
     } catch (e) {
       if (mounted) {

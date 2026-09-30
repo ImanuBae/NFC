@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -105,7 +106,7 @@ class _KioskIdlePageState extends ConsumerState<KioskIdlePage> {
                 Navigator.of(ctx).pop();
                 await ref.read(deviceConfigProvider).clearDeviceId();
                 if (mounted) {
-                  Navigator.of(context).pushReplacementNamed('/kiosk/setup');
+                  context.go('/kiosk/setup');
                 }
               },
             ),
