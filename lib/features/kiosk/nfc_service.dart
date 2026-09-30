@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:nfc_manager/nfc_manager.dart';
+import 'package:nfc_manager/nfc_manager_android.dart';
+import 'package:nfc_manager/nfc_manager_ios.dart';
 
 import '../../core/config.dart';
 import '../../core/uid.dart';
@@ -24,7 +26,8 @@ class RealNfcService implements NfcService {
   @override
   Future<bool> isAvailable() async {
     try {
-      return await NfcManager.instance.isAvailable();
+      final status = await NfcManager.instance.checkAvailability();
+      return status == NfcAvailability.enabled;
     } catch (_) {
       return false;
     }
@@ -39,6 +42,11 @@ class RealNfcService implements NfcService {
     _isScanning = true;
     try {
       await NfcManager.instance.startSession(
+        pollingOptions: {
+          NfcPollingOption.iso14443,
+          NfcPollingOption.iso15693,
+          NfcPollingOption.iso18092,
+        },
         onDiscovered: (NfcTag tag) async {
           final uid = extractUidFromTag(tag);
           if (uid != null && uid.isNotEmpty) {
@@ -61,32 +69,36 @@ class RealNfcService implements NfcService {
   }
 
   static String? extractUidFromTag(NfcTag tag) {
-    final data = tag.data;
-    List<int>? bytes;
-
-    if (data['identifier'] is List) {
-      bytes = (data['identifier'] as List).cast<int>();
-    } else {
-      const techKeys = [
-        'nfca',
-        'nfcb',
-        'nfcf',
-        'nfcv',
-        'isodep',
-        'mifareclassic',
-        'mifareultralight',
-        'ndef',
-      ];
-      for (final key in techKeys) {
-        final tech = data[key];
-        if (tech is Map && tech['identifier'] is List) {
-          bytes = (tech['identifier'] as List).cast<int>();
-          break;
-        }
+    try {
+      final androidTag = NfcTagAndroid.from(tag);
+      if (androidTag != null && androidTag.id.isNotEmpty) {
+        return _bytesToHex(androidTag.id);
       }
-    }
+    } catch (_) {}
 
-    if (bytes == null || bytes.isEmpty) return null;
+    try {
+      final miFare = MiFareIos.from(tag);
+      if (miFare != null && miFare.identifier.isNotEmpty) {
+        return _bytesToHex(miFare.identifier);
+      }
+      final iso15693 = Iso15693Ios.from(tag);
+      if (iso15693 != null && iso15693.identifier.isNotEmpty) {
+        return _bytesToHex(iso15693.identifier);
+      }
+      final iso7816 = Iso7816Ios.from(tag);
+      if (iso7816 != null && iso7816.identifier.isNotEmpty) {
+        return _bytesToHex(iso7816.identifier);
+      }
+      final felica = FeliCaIos.from(tag);
+      if (felica != null && felica.currentIDm.isNotEmpty) {
+        return _bytesToHex(felica.currentIDm);
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  static String _bytesToHex(Uint8List bytes) {
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 }
