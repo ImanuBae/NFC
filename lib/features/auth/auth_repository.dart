@@ -9,6 +9,8 @@ abstract class AuthRepository {
   Future<void> signIn({required String email, required String password});
   Future<void> signOut();
   Future<String?> getCurrentUserRole();
+  Future<String?> getCurrentUserEmployeeId();
+  Future<void> linkCurrentEmployee(String employeeId);
 }
 
 class SupabaseAuthRepository implements AuthRepository {
@@ -53,6 +55,35 @@ class SupabaseAuthRepository implements AuthRepository {
       return null;
     }
   }
+
+  @override
+  Future<String?> getCurrentUserEmployeeId() async {
+    final user = currentUser;
+    if (user == null) return null;
+
+    try {
+      final response = await _client
+          .from('profiles')
+          .select('employee_id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (response == null) return null;
+      return response['employee_id'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<void> linkCurrentEmployee(String employeeId) async {
+    final user = currentUser;
+    if (user == null) return;
+    await _client
+        .from('profiles')
+        .update({'employee_id': employeeId})
+        .eq('id', user.id);
+  }
 }
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -63,4 +94,9 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 final authStateProvider = StreamProvider<AuthState>((ref) {
   final repo = ref.watch(authRepositoryProvider);
   return repo.authStateChanges;
+});
+
+final currentUserEmployeeIdProvider = FutureProvider.autoDispose<String?>((ref) async {
+  final repo = ref.watch(authRepositoryProvider);
+  return repo.getCurrentUserEmployeeId();
 });

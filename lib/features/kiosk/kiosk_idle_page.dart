@@ -15,6 +15,7 @@ import 'device_config.dart';
 import 'fake_scan_dialog.dart';
 import 'kiosk_pin_dialog.dart';
 import 'kiosk_result_view.dart';
+import 'my_history_page.dart';
 import 'nfc_service.dart';
 import 'pending_scan_store.dart';
 import 'scan_coordinator.dart';
@@ -34,6 +35,7 @@ class _KioskIdlePageState extends ConsumerState<KioskIdlePage> {
   ScanResult? _currentResult;
   Timer? _resultDismissTimer;
   StreamSubscription<String>? _nfcSub;
+  int _tabIndex = 0;
 
   @override
   void initState() {
@@ -124,6 +126,29 @@ class _KioskIdlePageState extends ConsumerState<KioskIdlePage> {
     );
   }
 
+  void _confirmLogout() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Đăng xuất'),
+        content: const Text('Bạn có chắc chắn muốn đăng xuất khỏi tài khoản này?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Hủy'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await ref.read(authRepositoryProvider).signOut();
+            },
+            child: const Text('Đăng xuất'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _clockTimer?.cancel();
@@ -144,6 +169,41 @@ class _KioskIdlePageState extends ConsumerState<KioskIdlePage> {
 
     final nfc = ref.watch(nfcServiceProvider);
     final theme = Theme.of(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(_tabIndex == 0 ? 'Máy chấm công Kiosk' : 'Lịch sử của tôi'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: S.logout,
+            onPressed: _confirmLogout,
+          ),
+        ],
+      ),
+      body: _tabIndex == 0
+          ? _buildClockBody(theme, nfc)
+          : const MyHistoryPage(),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tabIndex,
+        onDestinationSelected: (idx) => setState(() => _tabIndex = idx),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.nfc_outlined),
+            selectedIcon: Icon(Icons.nfc),
+            label: 'Chấm công',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
+            label: 'Lịch sử của tôi',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildClockBody(ThemeData theme, NfcService nfc) {
     final timeStr = DateFormat('HH:mm:ss').format(_currentTime);
     String dateStr;
     try {
@@ -152,139 +212,137 @@ class _KioskIdlePageState extends ConsumerState<KioskIdlePage> {
       dateStr = DateFormat('dd/MM/yyyy').format(_currentTime);
     }
 
-    return Scaffold(
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  GestureDetector(
-                    onLongPress: _onLogoLongPressed,
-                    child: Icon(
-                      Icons.nfc_rounded,
-                      size: 96,
-                      color: theme.colorScheme.primary,
-                    ),
+    return SafeArea(
+      child: Stack(
+        children: [
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                GestureDetector(
+                  onLongPress: _onLogoLongPressed,
+                  child: Icon(
+                    Icons.nfc_rounded,
+                    size: 96,
+                    color: theme.colorScheme.primary,
                   ),
-                  const SizedBox(height: 32),
-                  Text(
-                    timeStr,
-                    style: theme.textTheme.displayLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 64,
-                      letterSpacing: 2,
-                    ),
+                ),
+                const SizedBox(height: 32),
+                Text(
+                  timeStr,
+                  style: theme.textTheme.displayLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 56,
+                    letterSpacing: 2,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    dateStr,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: Colors.grey[600],
-                    ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  dateStr,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: Colors.grey[600],
                   ),
-                  const SizedBox(height: 48),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primaryContainer,
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: Text(
-                      S.tapCardPrompt,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Positioned(
-              top: 16,
-              left: 16,
-              child: Builder(
-                builder: (context) {
-                  final isOnline =
-                      ref.watch(isOnlineStreamProvider).value ?? true;
-                  final pendingCount =
-                      ref.watch(pendingCountProvider).value ?? 0;
-                  final statusText = isOnline
-                      ? (pendingCount > 0
-                            ? '${S.onlineStatus} ($pendingCount chờ đồng bộ)'
-                            : S.onlineStatus)
-                      : (pendingCount > 0
-                            ? '${S.offlineStatus} ($pendingCount chờ đồng bộ)'
-                            : S.offlineStatus);
-
-                  return Row(
-                    children: [
-                      Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: isOnline ? Colors.green : Colors.amber[700],
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        statusText,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-            if (!_nfcAvailable)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  color: Colors.red[800],
+                ),
+                const SizedBox(height: 40),
+                Container(
                   padding: const EdgeInsets.symmetric(
-                    vertical: 8,
-                    horizontal: 16,
+                    horizontal: 24,
+                    vertical: 12,
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.warning, color: Colors.white, size: 20),
-                      const SizedBox(width: 8),
-                      const Text(
-                        S.nfcDisabledWarning,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: Text(
+                    S.tapCardPrompt,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onPrimaryContainer,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            top: 16,
+            left: 16,
+            child: Builder(
+              builder: (context) {
+                final isOnline =
+                    ref.watch(isOnlineStreamProvider).value ?? true;
+                final pendingCount =
+                    ref.watch(pendingCountProvider).value ?? 0;
+                final statusText = isOnline
+                    ? (pendingCount > 0
+                          ? '${S.onlineStatus} ($pendingCount chờ đồng bộ)'
+                          : S.onlineStatus)
+                    : (pendingCount > 0
+                          ? '${S.offlineStatus} ($pendingCount chờ đồng bộ)'
+                          : S.offlineStatus);
+
+                return Row(
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: isOnline ? Colors.green : Colors.amber[700],
+                        shape: BoxShape.circle,
                       ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      statusText,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+          if (!_nfcAvailable)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                color: Colors.red[800],
+                padding: const EdgeInsets.symmetric(
+                  vertical: 8,
+                  horizontal: 16,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.warning, color: Colors.white, size: 20),
+                    const SizedBox(width: 8),
+                    const Text(
+                      S.nfcDisabledWarning,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            if (nfc is FakeNfcService)
-              Positioned(
-                bottom: 24,
-                right: 24,
-                child: FloatingActionButton.extended(
-                  onPressed: () => FakeScanDialog.show(context, nfc),
-                  icon: const Icon(Icons.touch_app),
-                  label: const Text(S.fakeNfcButton),
-                ),
+            ),
+          if (nfc is FakeNfcService)
+            Positioned(
+              bottom: 24,
+              right: 24,
+              child: FloatingActionButton.extended(
+                onPressed: () => FakeScanDialog.show(context, nfc),
+                icon: const Icon(Icons.touch_app),
+                label: const Text(S.fakeNfcButton),
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
