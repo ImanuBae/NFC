@@ -58,7 +58,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     } on AuthException catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = '${S.loginFailed} (${e.message})';
+          if (e.message.toLowerCase().contains('socketexception') ||
+              e.message.toLowerCase().contains('failed host lookup') ||
+              e.message.toLowerCase().contains('network')) {
+            _errorMessage = 'Lỗi kết nối mạng: Không thể kết nối tới máy chủ';
+          } else if (e.message.toLowerCase().contains('invalid') ||
+              e.message.toLowerCase().contains('credential')) {
+            _errorMessage = S.loginFailed;
+          } else {
+            _errorMessage = e.message;
+          }
           _isLoading = false;
         });
       }
