@@ -26,10 +26,21 @@ class SupabaseAuthRepository implements AuthRepository {
 
   @override
   Future<void> signIn({required String email, required String password}) async {
-    await _client.auth.signInWithPassword(
-      email: email.trim(),
-      password: password,
-    );
+    try {
+      await _client.auth.signInWithPassword(
+        email: email.trim(),
+        password: password,
+      );
+    } on AuthException {
+      if (password.trim() != password) {
+        await _client.auth.signInWithPassword(
+          email: email.trim(),
+          password: password.trim(),
+        );
+      } else {
+        rethrow;
+      }
+    }
   }
 
   @override

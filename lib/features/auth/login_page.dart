@@ -17,6 +17,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
   String? _errorMessage;
 
   @override
@@ -54,17 +55,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         return;
       }
       // Router redirection will handle navigating to appropriate role screen
-    } on AuthException {
+    } on AuthException catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = S.loginFailed;
+          _errorMessage = '${S.loginFailed} (${e.message})';
           _isLoading = false;
         });
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = S.unknownError;
+          _errorMessage = '${S.unknownError}: $e';
           _isLoading = false;
         });
       }
@@ -135,6 +136,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
+                    autocorrect: false,
                     decoration: const InputDecoration(
                       labelText: S.email,
                       prefixIcon: Icon(Icons.email_outlined),
@@ -149,10 +151,23 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _passwordController,
-                    obscureText: true,
-                    decoration: const InputDecoration(
+                    obscureText: _obscurePassword,
+                    autocorrect: false,
+                    decoration: InputDecoration(
                       labelText: S.password,
-                      prefixIcon: Icon(Icons.lock_outline),
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
                     ),
                     validator: (val) {
                       if (val == null || val.isEmpty) {

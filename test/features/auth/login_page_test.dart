@@ -78,7 +78,7 @@ void main() {
       await tester.pump(); // Start async login
       await tester.pump(); // Finish catch block
 
-      expect(find.text(S.loginFailed), findsOneWidget);
+      expect(find.textContaining(S.loginFailed), findsOneWidget);
     },
   );
 
