@@ -6,9 +6,21 @@ class DayReportItem {
   final DateTime? firstIn;
   final DateTime? lastOut;
   final int workedMinutes;
+  final int completedMinutes;
   final bool missingCheckout;
   final bool isLate;
   final bool isEarlyLeave;
+  final bool isInShift;
+  final bool needsReview;
+  final int requiredMinutes;
+  final int remainingMinutes;
+  final int lateMinutes;
+  final DateTime? expectedCompletion;
+  final String? lastEventId;
+  final String? lastEventType;
+  final String? lastEventSource;
+  final DateTime? lastEventAt;
+  final List<AttendanceInterval> sessions;
 
   DayReportItem({
     required this.employeeId,
@@ -18,9 +30,21 @@ class DayReportItem {
     this.firstIn,
     this.lastOut,
     required this.workedMinutes,
+    this.completedMinutes = 0,
     required this.missingCheckout,
     required this.isLate,
     this.isEarlyLeave = false,
+    this.isInShift = false,
+    this.needsReview = false,
+    this.requiredMinutes = 480,
+    this.remainingMinutes = 0,
+    this.lateMinutes = 0,
+    this.expectedCompletion,
+    this.lastEventId,
+    this.lastEventType,
+    this.lastEventSource,
+    this.lastEventAt,
+    this.sessions = const [],
   });
 
   String get workedDurationFormatted {
@@ -55,11 +79,40 @@ class DayReportItem {
           ? DateTime.parse(json['last_out'] as String).toLocal()
           : null,
       workedMinutes: (json['worked_minutes'] as num?)?.toInt() ?? 0,
+      completedMinutes:
+          (json['completed_minutes'] as num?)?.toInt() ??
+          (json['worked_minutes'] as num?)?.toInt() ??
+          0,
       missingCheckout: json['missing_checkout'] as bool? ?? false,
       isLate: json['is_late'] as bool? ?? false,
       isEarlyLeave: json['is_early_leave'] as bool? ?? false,
+      isInShift: json['is_in_shift'] as bool? ?? false,
+      needsReview: json['needs_review'] as bool? ?? false,
+      requiredMinutes: (json['required_minutes'] as num?)?.toInt() ?? 480,
+      remainingMinutes: (json['remaining_minutes'] as num?)?.toInt() ?? 0,
+      lateMinutes: (json['late_minutes'] as num?)?.toInt() ?? 0,
+      expectedCompletion: DateTime.tryParse('${json['expected_completion']}')
+          ?.toLocal(),
+      lastEventId: json['last_event_id'] as String?,
+      lastEventType: json['last_event_type'] as String?,
+      lastEventSource: json['last_event_source'] as String?,
+      lastEventAt: DateTime.tryParse('${json['last_event_at']}')?.toLocal(),
+      sessions: (json['sessions'] as List? ?? [])
+          .map(
+            (s) => AttendanceInterval(
+              DateTime.parse(s['start'] as String).toLocal(),
+              DateTime.tryParse('${s['end']}')?.toLocal(),
+            ),
+          )
+          .toList(),
     );
   }
+}
+
+class AttendanceInterval {
+  const AttendanceInterval(this.start, this.end);
+  final DateTime start;
+  final DateTime? end;
 }
 
 class AttendanceEventItem {

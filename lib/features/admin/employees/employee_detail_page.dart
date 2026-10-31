@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/strings.dart';
 import '../cards/card_model.dart';
@@ -129,6 +130,16 @@ class EmployeeDetailPage extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 24),
+                if (emp.email != null) Text('Email: ${emp.email}'),
+                if (emp.department != null)
+                  Text('Phòng ban: ${emp.department}'),
+                if (emp.jobTitle != null) Text('Chức vụ: ${emp.jobTitle}'),
+                if (emp.phone != null) Text('Số điện thoại: ${emp.phone}'),
+                if (emp.hireDate != null)
+                  Text(
+                    'Ngày vào làm: ${DateFormat('dd/MM/yyyy').format(emp.hireDate!)}',
+                  ),
+                const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [

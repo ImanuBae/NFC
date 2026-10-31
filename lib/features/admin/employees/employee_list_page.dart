@@ -50,13 +50,24 @@ class EmployeeListPage extends ConsumerWidget {
       body: Column(
         children: [
           Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FilledButton.icon(
+                onPressed: () => context.go('/admin/employees/import'),
+                icon: const Icon(Icons.upload_file),
+                label: const Text('Nhập nhân viên từ Excel'),
+              ),
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.all(16.0),
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
                     decoration: const InputDecoration(
-                      hintText: S.searchEmployees,
+                      hintText: 'Tìm mã, tên, email hoặc phòng ban',
                       prefixIcon: Icon(Icons.search),
                       isDense: true,
                     ),
@@ -126,7 +137,9 @@ class EmployeeListPage extends ConsumerWidget {
                           ),
                         ),
                         subtitle: Text(
-                          'Mã: ${emp.code} • ${emp.active ? S.active : S.inactive}',
+                          'Mã: ${emp.code} • ${emp.active ? S.active : S.inactive}'
+                          '${emp.department == null ? '' : ' • ${emp.department}'}'
+                          '${emp.jobTitle == null ? '' : ' • ${emp.jobTitle}'}',
                           style: TextStyle(
                             color: emp.active ? Colors.green[700] : Colors.red,
                           ),

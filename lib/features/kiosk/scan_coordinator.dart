@@ -1,11 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/result.dart';
-import '../../core/supabase_client.dart';
+import '../../core/api_client.dart';
 import '../../core/uid.dart';
 import 'device_config.dart';
 import 'pending_scan_store.dart';
@@ -28,10 +27,10 @@ abstract class KioskRpcService {
   });
 }
 
-class SupabaseKioskRpcService implements KioskRpcService {
-  final SupabaseClient _client;
+class ApiKioskRpcService implements KioskRpcService {
+  final ApiClient _client;
 
-  SupabaseKioskRpcService(this._client);
+  ApiKioskRpcService(this._client);
 
   @override
   Future<dynamic> recordScan({
@@ -41,14 +40,15 @@ class SupabaseKioskRpcService implements KioskRpcService {
     required String clientScanId,
     required bool isReplay,
   }) {
-    return _client.rpc(
-      'record_scan',
-      params: {
-        'p_uid': uid,
-        'p_device_id': deviceId,
-        'p_device_time': deviceTime.toIso8601String(),
-        'p_client_scan_id': clientScanId,
-        'p_is_replay': isReplay,
+    return _client.request(
+      'POST',
+      '/scans',
+      body: {
+        'uid': uid,
+        'device_id': deviceId,
+        'device_time': deviceTime.toIso8601String(),
+        'client_scan_id': clientScanId,
+        'is_replay': isReplay,
       },
     );
   }
@@ -82,6 +82,12 @@ class ScanCoordinator {
     final clientScanId = const Uuid().v4();
     final deviceTime = DateTime.now().toUtc();
     final deviceId = await deviceConfig.getDeviceId();
+    if (deviceId == null || deviceId.isEmpty) {
+      return const ScanFailure(
+        'Máy Kiosk chưa được đăng ký cho tài khoản này. Vui lòng nhờ quản lý thiết lập máy.',
+        requiresDeviceSetup: true,
+      );
+    }
 
     try {
       final response = await rpcService
@@ -116,25 +122,52 @@ class ScanCoordinator {
         case 'duplicate':
           return null;
         default:
-          return null;
+          return const ScanFailure(
+            'Máy chủ trả kết quả không hợp lệ. Vui lòng thử lại.',
+          );
       }
+    } on ApiException catch (error) {
+      if (error.message.contains('Unregistered or inactive device')) {
+        try {
+          await deviceConfig.clearDeviceId(expectedDeviceId: deviceId);
+        } catch (_) {
+          // Still offer the PIN-protected setup action if local cleanup fails.
+        }
+        return const ScanFailure(
+          'Máy Kiosk chưa được liên kết với tài khoản hiện tại hoặc đã bị vô hiệu hóa. '
+          'Quản lý cần kiểm tra trạng thái máy và đăng ký lại nếu được phép.',
+          requiresDeviceSetup: true,
+        );
+      }
+      return ScanFailure(
+        'Máy chủ chưa ghi nhận lượt chấm công: ${error.message}',
+      );
     } catch (_) {
       final queue = offlineQueue;
       if (queue != null) {
-        await queue.enqueue(
-          clientScanId: clientScanId,
-          uid: uid,
-          deviceTime: deviceTime,
-        );
+        try {
+          await queue.enqueue(
+            clientScanId: clientScanId,
+            uid: uid,
+            deviceTime: deviceTime,
+          );
+          return const ScanQueuedOffline();
+        } catch (_) {
+          return const ScanFailure(
+            'Không lưu được lượt chấm công. Vui lòng thử lại hoặc liên hệ quản lý.',
+          );
+        }
       }
-      return const ScanQueuedOffline();
+      return const ScanFailure(
+        'Chưa ghi nhận lượt chấm công. Vui lòng kiểm tra mạng và thử lại.',
+      );
     }
   }
 }
 
 final kioskRpcServiceProvider = Provider<KioskRpcService>((ref) {
-  final client = ref.watch(supabaseClientProvider);
-  return SupabaseKioskRpcService(client);
+  final client = ref.watch(apiClientProvider);
+  return ApiKioskRpcService(client);
 });
 
 final scanCoordinatorProvider = Provider<ScanCoordinator>((ref) {

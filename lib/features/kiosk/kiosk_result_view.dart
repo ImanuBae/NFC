@@ -6,8 +6,9 @@ import '../../core/strings.dart';
 
 class KioskResultView extends StatelessWidget {
   final ScanResult result;
+  final VoidCallback? onDeviceSetup;
 
-  const KioskResultView({super.key, required this.result});
+  const KioskResultView({super.key, required this.result, this.onDeviceSetup});
 
   @override
   Widget build(BuildContext context) {
@@ -21,8 +22,11 @@ class KioskResultView extends StatelessWidget {
         final localAt = ok.at.toLocal();
         final timeFormatted = DateFormat('HH:mm:ss').format(localAt);
         if (ok.isCheckIn) {
-          final isLate = localAt.hour > 9 || (localAt.hour == 9 && localAt.minute > 0);
-          backgroundColor = isLate ? const Color(0xFFE65100) : const Color(0xFF2E7D32); // Orange if late, green if on time
+          final isLate =
+              localAt.hour > 9 || (localAt.hour == 9 && localAt.minute > 0);
+          backgroundColor = isLate
+              ? const Color(0xFFE65100)
+              : const Color(0xFF2E7D32); // Orange if late, green if on time
           icon = Icons.login_rounded;
           title = '${S.welcomePrefix}${ok.name}';
           subtitle = isLate
@@ -30,7 +34,9 @@ class KioskResultView extends StatelessWidget {
               : 'Vào ca: $timeFormatted (Đúng giờ)';
         } else {
           final isEarlyLeave = localAt.hour < 18;
-          backgroundColor = isEarlyLeave ? const Color(0xFFE65100) : const Color(0xFF1565C0); // Orange if early, blue if normal
+          backgroundColor = isEarlyLeave
+              ? const Color(0xFFE65100)
+              : const Color(0xFF1565C0); // Orange if early, blue if normal
           icon = Icons.logout_rounded;
           title = '${S.goodbyePrefix}${ok.name}';
           subtitle = isEarlyLeave
@@ -55,6 +61,12 @@ class KioskResultView extends StatelessWidget {
         icon = Icons.cloud_off_rounded;
         title = S.scanQueuedOffline;
         subtitle = null;
+        break;
+      case ScanFailure failure:
+        backgroundColor = const Color(0xFFC62828);
+        icon = Icons.error_outline;
+        title = 'Chưa ghi nhận chấm công';
+        subtitle = failure.message;
         break;
     }
 
@@ -88,6 +100,16 @@ class KioskResultView extends StatelessWidget {
                       color: Colors.white70,
                       fontWeight: FontWeight.w500,
                     ),
+                  ),
+                ],
+                if (result is ScanFailure &&
+                    (result as ScanFailure).requiresDeviceSetup &&
+                    onDeviceSetup != null) ...[
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    onPressed: onDeviceSetup,
+                    icon: const Icon(Icons.settings),
+                    label: const Text('Thiết lập lại máy Kiosk'),
                   ),
                 ],
               ],

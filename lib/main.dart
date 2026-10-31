@@ -1,23 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:intl/date_symbol_data_local.dart';
 
 import 'app.dart';
+import 'core/server_connection.dart';
 import 'core/config.dart';
+
+import 'package:shared_preferences/shared_preferences.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('vi_VN', null);
 
-  if (AppConfig.isSupabaseConfigured) {
-    await Supabase.initialize(
-      url: AppConfig.supabaseUrl,
-      publishableKey: AppConfig.supabaseAnonKey,
-      anonKey: AppConfig.supabaseAnonKey, // ignore: deprecated_member_use
-    );
-  }
-
-  runApp(const ProviderScope(child: NfcAttendanceApp()));
+  final prefs = await SharedPreferences.getInstance();
+  final serverUrl =
+      prefs.getString(serverUrlPreferenceKey) ?? AppConfig.apiBaseUrl;
+  runApp(
+    ProviderScope(
+      overrides: [initialServerUrlProvider.overrideWithValue(serverUrl)],
+      child: const NfcAttendanceApp(),
+    ),
+  );
 }

@@ -32,3 +32,9 @@ class ScanIgnored extends ScanResult {
 class ScanQueuedOffline extends ScanResult {
   const ScanQueuedOffline();
 }
+
+class ScanFailure extends ScanResult {
+  final String message;
+  final bool requiresDeviceSetup;
+  const ScanFailure(this.message, {this.requiresDeviceSetup = false});
+}

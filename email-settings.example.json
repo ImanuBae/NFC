@@ -1,0 +1,12 @@
+{
+  "Email": {
+    "Provider": "Gmail",
+    "From": "",
+    "Smtp": {
+      "Host": "smtp.gmail.com",
+      "Port": 587,
+      "Username": "",
+      "AppPassword": ""
+    }
+  }
+}

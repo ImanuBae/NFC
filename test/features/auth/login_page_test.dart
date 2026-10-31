@@ -7,17 +7,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:demo_nfc/core/api_client.dart';
 
 class MockAuthRepository extends Mock implements AuthRepository {}
 
 void main() {
   late MockAuthRepository mockAuthRepo;
-  late StreamController<AuthState> authStateController;
+  late StreamController<AppUser?> authStateController;
 
   setUp(() {
     mockAuthRepo = MockAuthRepository();
-    authStateController = StreamController<AuthState>.broadcast();
+    authStateController = StreamController<AppUser?>.broadcast();
     when(() => mockAuthRepo.authStateChanges)
         .thenAnswer((_) => authStateController.stream);
   });
@@ -55,14 +55,14 @@ void main() {
   });
 
   testWidgets(
-    'shows Vietnamese error message on AuthException (wrong password)',
+    'shows Vietnamese error message on ApiException (wrong password)',
     (tester) async {
       when(
         () => mockAuthRepo.signIn(
           email: any(named: 'email'),
           password: any(named: 'password'),
         ),
-      ).thenThrow(const AuthException('Invalid login credentials'));
+      ).thenThrow(const ApiException('Invalid login credentials'));
 
       await tester.pumpWidget(createWidgetUnderTest());
 

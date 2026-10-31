@@ -9,6 +9,25 @@ void main() {
     return MaterialApp(home: KioskResultView(result: result));
   }
 
+  testWidgets('registration error exposes a device setup action', (
+    tester,
+  ) async {
+    var requested = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: KioskResultView(
+          result: const ScanFailure(
+            'Cần đăng ký lại máy.',
+            requiresDeviceSetup: true,
+          ),
+          onDeviceSetup: () => requested = true,
+        ),
+      ),
+    );
+    await tester.tap(find.text('Thiết lập lại máy Kiosk'));
+    expect(requested, isTrue);
+  });
+
   testWidgets('displays check-in with green background and welcome message', (
     tester,
   ) async {
@@ -28,43 +47,45 @@ void main() {
     expect(scaffold.backgroundColor, equals(const Color(0xFF2E7D32)));
   });
 
-  testWidgets('displays check-out on time with blue background and goodbye message', (
-    tester,
-  ) async {
-    final result = ScanOk(
-      isCheckIn: false,
-      name: 'Tran Thi B',
-      code: 'NV02',
-      at: DateTime(2026, 9, 28, 18, 30, 0),
-    );
+  testWidgets(
+    'displays check-out on time with blue background and goodbye message',
+    (tester) async {
+      final result = ScanOk(
+        isCheckIn: false,
+        name: 'Tran Thi B',
+        code: 'NV02',
+        at: DateTime(2026, 9, 28, 18, 30, 0),
+      );
 
-    await tester.pumpWidget(buildWidget(result));
+      await tester.pumpWidget(buildWidget(result));
 
-    expect(find.text('${S.goodbyePrefix}Tran Thi B'), findsOneWidget);
-    expect(find.text('Ra ca: 18:30:00 (Đúng giờ)'), findsOneWidget);
+      expect(find.text('${S.goodbyePrefix}Tran Thi B'), findsOneWidget);
+      expect(find.text('Ra ca: 18:30:00 (Đúng giờ)'), findsOneWidget);
 
-    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-    expect(scaffold.backgroundColor, equals(const Color(0xFF1565C0)));
-  });
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+      expect(scaffold.backgroundColor, equals(const Color(0xFF1565C0)));
+    },
+  );
 
-  testWidgets('displays check-out early leave with orange background and early leave message', (
-    tester,
-  ) async {
-    final result = ScanOk(
-      isCheckIn: false,
-      name: 'Tran Thi B',
-      code: 'NV02',
-      at: DateTime(2026, 9, 28, 17, 30, 0),
-    );
+  testWidgets(
+    'displays check-out early leave with orange background and early leave message',
+    (tester) async {
+      final result = ScanOk(
+        isCheckIn: false,
+        name: 'Tran Thi B',
+        code: 'NV02',
+        at: DateTime(2026, 9, 28, 17, 30, 0),
+      );
 
-    await tester.pumpWidget(buildWidget(result));
+      await tester.pumpWidget(buildWidget(result));
 
-    expect(find.text('${S.goodbyePrefix}Tran Thi B'), findsOneWidget);
-    expect(find.text('Ra ca: 17:30:00 (Về sớm < 18:00)'), findsOneWidget);
+      expect(find.text('${S.goodbyePrefix}Tran Thi B'), findsOneWidget);
+      expect(find.text('Ra ca: 17:30:00 (Về sớm < 18:00)'), findsOneWidget);
 
-    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-    expect(scaffold.backgroundColor, equals(const Color(0xFFE65100)));
-  });
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
+      expect(scaffold.backgroundColor, equals(const Color(0xFFE65100)));
+    },
+  );
 
   testWidgets(
     'displays rejected with red background and invalid card message',

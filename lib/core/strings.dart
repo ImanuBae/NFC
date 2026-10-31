@@ -7,7 +7,7 @@ class S {
   static const appTitle = 'NFC Attendance';
   static const configErrorTitle = 'Lỗi cấu hình';
   static const configErrorMsg =
-      'Thiếu SUPABASE_URL hoặc SUPABASE_ANON_KEY. Vui lòng chạy app với cờ --dart-define.';
+      'Thiếu API_BASE_URL. Vui lòng chạy app với --dart-define-from-file=config.local.json.';
   static const retry = 'Thử lại';
   static const save = 'Lưu';
   static const cancel = 'Hủy';

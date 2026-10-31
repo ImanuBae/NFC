@@ -48,6 +48,7 @@ class _ManualEditSheetState extends ConsumerState<ManualEditSheet> {
   bool _isLoading = false;
   String? _error;
   List<Employee> _employees = [];
+  bool _loadingEmployees = true;
 
   @override
   void initState() {
@@ -58,14 +59,24 @@ class _ManualEditSheetState extends ConsumerState<ManualEditSheet> {
 
   Future<void> _loadEmployees() async {
     final repo = ref.read(employeeRepositoryProvider);
-    final list = await repo.getEmployees(activeOnly: true);
-    if (mounted) {
-      setState(() {
-        _employees = list;
-        if (_selectedEmployeeId == null && list.isNotEmpty) {
-          _selectedEmployeeId = list.first.id;
-        }
-      });
+    try {
+      final list = await repo.getEmployees(activeOnly: true);
+      if (mounted) {
+        setState(() {
+          _employees = list;
+          if (!list.any((e) => e.id == _selectedEmployeeId)) {
+            _selectedEmployeeId = list.isEmpty ? null : list.first.id;
+          }
+          _loadingEmployees = false;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = 'Không tải được nhân viên: $error';
+          _loadingEmployees = false;
+        });
+      }
     }
   }
 
@@ -151,19 +162,22 @@ class _ManualEditSheetState extends ConsumerState<ManualEditSheet> {
               Text(_error!, style: const TextStyle(color: Colors.red)),
               const SizedBox(height: 8),
             ],
-            DropdownButtonFormField<String>(
-              initialValue: _selectedEmployeeId,
-              decoration: const InputDecoration(labelText: 'Nhân viên'),
-              items: _employees.map((emp) {
-                return DropdownMenuItem(
-                  value: emp.id,
-                  child: Text('${emp.code} - ${emp.fullName}'),
-                );
-              }).toList(),
-              onChanged: (val) => setState(() => _selectedEmployeeId = val),
-              validator: (val) =>
-                  val == null ? 'Vui lòng chọn nhân viên' : null,
-            ),
+            if (_loadingEmployees)
+              const LinearProgressIndicator()
+            else
+              DropdownButtonFormField<String>(
+                initialValue: _selectedEmployeeId,
+                decoration: const InputDecoration(labelText: 'Nhân viên'),
+                items: _employees.map((emp) {
+                  return DropdownMenuItem(
+                    value: emp.id,
+                    child: Text('${emp.code} - ${emp.fullName}'),
+                  );
+                }).toList(),
+                onChanged: (val) => setState(() => _selectedEmployeeId = val),
+                validator: (val) =>
+                    val == null ? 'Vui lòng chọn nhân viên' : null,
+              ),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
               initialValue: _eventType,
@@ -192,6 +206,9 @@ class _ManualEditSheetState extends ConsumerState<ManualEditSheet> {
             const SizedBox(height: 16),
             TextFormField(
               controller: _reasonController,
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Vui lòng nhập lý do chấm công thủ công'
+                  : null,
               decoration: const InputDecoration(
                 labelText: 'Ghi chú / Lý do thêm tay',
                 hintText: 'VD: Quên mang thẻ',
@@ -199,7 +216,9 @@ class _ManualEditSheetState extends ConsumerState<ManualEditSheet> {
             ),
             const SizedBox(height: 24),
             FilledButton(
-              onPressed: _isLoading ? null : _save,
+              onPressed: _isLoading || _loadingEmployees || _employees.isEmpty
+                  ? null
+                  : _save,
               child: Text(_isLoading ? S.loading : S.save),
             ),
           ],

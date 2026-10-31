@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="OnePlus USB" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="filePath" value="$PROJECT_DIR$/lib/main.dart" />
+    <option name="additionalArgs" value="--dart-define-from-file=config.local.json --dart-define=API_BASE_URL=http://127.0.0.1:5080" />
+    <method />
+  </configuration>
+</component>

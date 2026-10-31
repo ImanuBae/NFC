@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:demo_nfc/core/strings.dart';
 import 'package:demo_nfc/features/admin/attendance/attendance_models.dart';
 import 'package:demo_nfc/features/admin/attendance/attendance_repository.dart';
@@ -26,6 +28,177 @@ void main() {
   }
 
   group('DayReportPage', () {
+    testWidgets(
+      'keeps dashboard visible during slow refresh and retries errors',
+      (tester) async {
+        var requests = 0;
+        final pending = Completer<List<DayReportItem>>();
+        final item = DayReportItem(
+          employeeId: 'e',
+          employeeCode: 'NV01',
+          employeeName: 'An',
+          workDate: DateTime.now(),
+          workedMinutes: 120,
+          missingCheckout: false,
+          isLate: false,
+        );
+        when(() => mockAttendanceRepo.getDayReport(any())).thenAnswer((_) {
+          requests++;
+          if (requests == 1) return Future.value([item]);
+          if (requests == 2) return pending.future;
+          return Future.value([item]);
+        });
+        await tester.pumpWidget(buildWidget());
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.text('NV01 - An'),
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await tester.pump(const Duration(seconds: 2));
+        expect(find.text('NV01 - An'), findsOneWidget);
+        expect(find.byType(CircularProgressIndicator), findsNothing);
+        pending.completeError(Exception('Network unavailable'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('NV01 - An'), findsOneWidget);
+        expect(find.textContaining('Chưa cập nhật được'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Chưa cập nhật được'), findsNothing);
+        expect(requests, 3);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
+
+    testWidgets('dashboard announces new NFC and face scans only once', (
+      tester,
+    ) async {
+      var event = 'initial';
+      var source = 'nfc';
+      var type = 'check_in';
+      when(() => mockAttendanceRepo.getDayReport(any())).thenAnswer(
+        (_) async => [
+          DayReportItem(
+            employeeId: 'emp-1',
+            employeeCode: 'NV01',
+            employeeName: 'An',
+            workDate: DateTime.now(),
+            firstIn: DateTime.now(),
+            workedMinutes: 30,
+            missingCheckout: false,
+            isLate: true,
+            isInShift: type == 'check_in',
+            remainingMinutes: 450,
+            lateMinutes: 30,
+            expectedCompletion: DateTime(2026, 10, 30, 18, 30),
+            lastEventId: event,
+            lastEventSource: source,
+            lastEventType: type,
+            lastEventAt: DateTime(2026, 10, 30, 9, 30),
+          ),
+        ],
+      );
+      await tester.pumpWidget(buildWidget());
+      await tester.pumpAndSettle();
+      expect(find.byType(MaterialBanner), findsNothing);
+      await tester.scrollUntilVisible(
+        find.textContaining('Dự kiến đủ công lúc 18:30'),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.textContaining('Dự kiến đủ công lúc 18:30'), findsOneWidget);
+      event = 'nfc-scan';
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(find.byType(MaterialBanner), findsOneWidget);
+      expect(find.textContaining('Vào ca lúc 09:30 · NFC'), findsOneWidget);
+      await tester.tap(find.text('Đóng'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(find.byType(MaterialBanner), findsNothing);
+      event = 'face-scan';
+      source = 'face_camera';
+      type = 'check_out';
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Ra ca lúc 09:30 · Khuôn mặt'),
+        findsOneWidget,
+      );
+      await tester.scrollUntilVisible(
+        find.text('Đã ra ca'),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Đã ra ca'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets('new attendance appears automatically without manual refresh', (
+      tester,
+    ) async {
+      var hasScan = false;
+      when(() => mockAttendanceRepo.getDayReport(any())).thenAnswer(
+        (_) async => hasScan
+            ? [
+                DayReportItem(
+                  employeeId: 'emp-new',
+                  employeeCode: 'NV03',
+                  employeeName: 'Nhan vien moi',
+                  workDate: DateTime.now(),
+                  firstIn: DateTime.now(),
+                  workedMinutes: 0,
+                  missingCheckout: true,
+                  isLate: false,
+                ),
+              ]
+            : [],
+      );
+      await tester.pumpWidget(buildWidget());
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text(S.noAttendanceData),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text(S.noAttendanceData), findsOneWidget);
+      hasScan = true;
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text('NV03 - Nhan vien moi'),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('NV03 - Nhan vien moi'), findsOneWidget);
+      expect(find.text(S.noAttendanceData), findsNothing);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+
+    testWidgets(
+      'slow refresh does not overlap requests and stops after leaving',
+      (tester) async {
+        final pending = Completer<List<DayReportItem>>();
+        var requests = 0;
+        when(() => mockAttendanceRepo.getDayReport(any())).thenAnswer((_) {
+          requests++;
+          return requests == 1 ? Future.value([]) : pending.future;
+        });
+        await tester.pumpWidget(buildWidget());
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pump(const Duration(seconds: 8));
+        expect(requests, 2);
+        await tester.pumpWidget(const SizedBox.shrink());
+        pending.complete([]);
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 5));
+        expect(requests, 2);
+      },
+    );
+
     testWidgets('renders attendance items with badges correctly', (
       tester,
     ) async {
@@ -59,10 +232,20 @@ void main() {
       await tester.pumpWidget(buildWidget());
       await tester.pumpAndSettle();
 
+      await tester.scrollUntilVisible(
+        find.text('NV01 - Nguyen Van A'),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text('NV01 - Nguyen Van A'), findsOneWidget);
       expect(find.text('8h 45m'), findsOneWidget);
       expect(find.text(S.lateBadge), findsOneWidget);
 
+      await tester.scrollUntilVisible(
+        find.text('NV02 - Tran Thi B'),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text('NV02 - Tran Thi B'), findsOneWidget);
       expect(find.text(S.missingCheckoutBadge), findsOneWidget);
     });
@@ -74,6 +257,11 @@ void main() {
       await tester.pumpWidget(buildWidget());
       await tester.pumpAndSettle();
 
+      await tester.scrollUntilVisible(
+        find.text(S.noAttendanceData),
+        180,
+        scrollable: find.byType(Scrollable).first,
+      );
       expect(find.text(S.noAttendanceData), findsOneWidget);
     });
   });

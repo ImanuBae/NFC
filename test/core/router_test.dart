@@ -1,29 +1,37 @@
 import 'dart:async';
 
 import 'package:demo_nfc/core/router.dart';
+import 'package:demo_nfc/core/server_connection.dart';
+import 'package:demo_nfc/features/admin/attendance/day_report_page.dart';
 import 'package:demo_nfc/features/auth/auth_repository.dart';
 import 'package:demo_nfc/features/kiosk/device_config.dart';
+import 'package:demo_nfc/features/kiosk/sync_service.dart';
+import 'package:demo_nfc/features/business/face_camera_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MockAuthRepository extends Mock implements AuthRepository {}
 
 class MockDeviceConfig extends Mock implements DeviceConfig {}
 
-class MockUser extends Mock implements User {}
+class MockUser extends Mock implements AppUser {}
+
+class MockSyncService extends Mock implements SyncService {}
+
+class MockFaceCameraService extends Mock implements FaceCameraService {}
 
 void main() {
   late MockAuthRepository mockAuthRepo;
   late MockDeviceConfig mockDeviceConfig;
-  late StreamController<AuthState> authStateController;
+  late StreamController<AppUser?> authStateController;
 
   setUp(() {
     mockAuthRepo = MockAuthRepository();
     mockDeviceConfig = MockDeviceConfig();
-    authStateController = StreamController<AuthState>.broadcast();
+    authStateController = StreamController<AppUser?>.broadcast();
 
     when(() => mockAuthRepo.authStateChanges)
         .thenAnswer((_) => authStateController.stream);
@@ -32,6 +40,88 @@ void main() {
   tearDown(() {
     authStateController.close();
   });
+
+  test('login notifications still update routing after changing API server', () async {
+    SharedPreferences.setMockInitialValues({});
+    final nextAuth = MockAuthRepository();
+    final nextEvents = StreamController<AppUser?>.broadcast();
+    addTearDown(nextEvents.close);
+    AppUser? signedInUser;
+    when(() => mockAuthRepo.currentUser).thenReturn(null);
+    when(() => mockAuthRepo.getCurrentUserRole()).thenAnswer((_) async => null);
+    when(() => nextAuth.authStateChanges).thenAnswer((_) => nextEvents.stream);
+    when(() => nextAuth.currentUser).thenAnswer((_) => signedInUser);
+    when(() => nextAuth.getCurrentUserRole())
+        .thenAnswer((_) async => signedInUser?.role);
+    when(() => mockDeviceConfig.getDeviceId()).thenAnswer((_) async => null);
+    final container = ProviderContainer(
+      overrides: [
+        initialServerUrlProvider.overrideWithValue('http://127.0.0.1:5080'),
+        authRepositoryProvider.overrideWith(
+          (ref) => ref.watch(serverUrlProvider).startsWith('https:')
+              ? nextAuth
+              : mockAuthRepo,
+        ),
+        deviceConfigProvider.overrideWithValue(mockDeviceConfig),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(routerNotifierProvider).refreshState();
+    await container
+        .read(serverUrlProvider.notifier)
+        .save('https://demo.devtunnels.ms');
+    final notifier = container.read(routerNotifierProvider);
+    await notifier.refreshState();
+    expect(notifier.userRole, isNull);
+    signedInUser = const AppUser(
+      id: 'kiosk',
+      email: 'kiosk@test.local',
+      role: 'kiosk',
+    );
+    nextEvents.add(signedInUser);
+    // Drain the async role/device lookup triggered by the new server's stream.
+    await Future<void>.delayed(Duration.zero);
+    expect(notifier.userRole, 'kiosk');
+  });
+
+  for (final role in ['employee', 'manager']) {
+    testWidgets('$role cannot enter account or employee administration', (
+      tester,
+    ) async {
+      when(() => mockAuthRepo.currentUser).thenReturn(MockUser());
+      when(() => mockAuthRepo.getCurrentUserRole())
+          .thenAnswer((_) async => role);
+      when(() => mockDeviceConfig.getDeviceId()).thenAnswer((_) async => null);
+      final biometric = MockFaceCameraService();
+      when(() => biometric.credential()).thenAnswer((_) async => null);
+      final container = ProviderContainer(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(mockAuthRepo),
+          deviceConfigProvider.overrideWithValue(mockDeviceConfig),
+          faceCameraServiceProvider.overrideWithValue(biometric),
+          dayReportProvider.overrideWith((ref) async => []),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(routerNotifierProvider).refreshState();
+      final router = container.read(routerProvider);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp.router(routerConfig: router),
+        ),
+      );
+      await tester.pumpAndSettle();
+      for (final path in ['/admin/accounts', '/admin/employees']) {
+        router.go(path);
+        await tester.pumpAndSettle();
+        expect(
+          router.state.matchedLocation,
+          role == 'employee' ? '/me' : '/admin/days',
+        );
+      }
+    });
+  }
 
   testWidgets('unauthenticated user is redirected to /login', (tester) async {
     when(() => mockAuthRepo.currentUser).thenReturn(null);
@@ -42,6 +132,7 @@ void main() {
       overrides: [
         authRepositoryProvider.overrideWithValue(mockAuthRepo),
         deviceConfigProvider.overrideWithValue(mockDeviceConfig),
+        syncServiceProvider.overrideWithValue(MockSyncService()),
       ],
     );
     addTearDown(container.dispose);
@@ -72,6 +163,8 @@ void main() {
       overrides: [
         authRepositoryProvider.overrideWithValue(mockAuthRepo),
         deviceConfigProvider.overrideWithValue(mockDeviceConfig),
+        syncServiceProvider.overrideWithValue(MockSyncService()),
+        dayReportProvider.overrideWith((ref) async => []),
       ],
     );
     addTearDown(container.dispose);
@@ -110,6 +203,7 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(mockAuthRepo),
           deviceConfigProvider.overrideWithValue(mockDeviceConfig),
+          syncServiceProvider.overrideWithValue(MockSyncService()),
         ],
       );
       addTearDown(container.dispose);
@@ -151,6 +245,7 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(mockAuthRepo),
           deviceConfigProvider.overrideWithValue(mockDeviceConfig),
+          syncServiceProvider.overrideWithValue(MockSyncService()),
         ],
       );
       addTearDown(container.dispose);

@@ -5,15 +5,12 @@ import 'package:intl/intl.dart';
 import '../admin/attendance/attendance_models.dart';
 import '../admin/attendance/attendance_repository.dart';
 import '../admin/employees/employee_detail_page.dart';
-import '../admin/employees/employee_list_page.dart';
+
 import '../admin/employees/employee_model.dart';
 import '../auth/auth_repository.dart';
 
-final myAttendanceEventsProvider =
-    FutureProvider.family.autoDispose<List<AttendanceEventItem>, String>((
-      ref,
-      employeeId,
-    ) async {
+final myAttendanceEventsProvider = FutureProvider.family
+    .autoDispose<List<AttendanceEventItem>, String>((ref, employeeId) async {
       final repo = ref.watch(attendanceRepositoryProvider);
       return repo.getEvents(employeeId: employeeId);
     });
@@ -26,9 +23,6 @@ class MyHistoryPage extends ConsumerStatefulWidget {
 }
 
 class _MyHistoryPageState extends ConsumerState<MyHistoryPage> {
-  String? _selectedEmployeeId;
-  bool _isLinking = false;
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -46,95 +40,14 @@ class _MyHistoryPageState extends ConsumerState<MyHistoryPage> {
     );
   }
 
-  Widget _buildLinkEmployeeView(ThemeData theme) {
-    final employeesAsync = ref.watch(employeeListProvider);
-
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 400),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.badge_outlined,
-                    size: 64,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Liên kết hồ sơ nhân viên',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Tài khoản này chưa liên kết với nhân viên nào. Vui lòng chọn hồ sơ nhân viên của bạn để xem lịch sử chấm công.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 24),
-                  employeesAsync.when(
-                    loading: () => const CircularProgressIndicator(),
-                    error: (err, _) => Text('Lỗi tải nhân viên: $err'),
-                    data: (employees) {
-                      if (employees.isEmpty) {
-                        return const Text('Chưa có nhân viên nào trên hệ thống.');
-                      }
-                      return DropdownButtonFormField<String>(
-                        initialValue: _selectedEmployeeId,
-                        decoration: const InputDecoration(
-                          labelText: 'Chọn nhân viên',
-                          prefixIcon: Icon(Icons.person),
-                        ),
-                        items: employees.map((emp) {
-                          return DropdownMenuItem<String>(
-                            value: emp.id,
-                            child: Text('${emp.code} - ${emp.fullName}'),
-                          );
-                        }).toList(),
-                        onChanged: (val) {
-                          setState(() => _selectedEmployeeId = val);
-                        },
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 24),
-                  FilledButton.icon(
-                    onPressed: _isLinking || _selectedEmployeeId == null
-                        ? null
-                        : () async {
-                            setState(() => _isLinking = true);
-                            try {
-                              await ref
-                                  .read(authRepositoryProvider)
-                                  .linkCurrentEmployee(_selectedEmployeeId!);
-                              ref.invalidate(currentUserEmployeeIdProvider);
-                            } catch (e) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Lỗi: $e')),
-                                );
-                              }
-                            } finally {
-                              if (mounted) setState(() => _isLinking = false);
-                            }
-                          },
-                    icon: const Icon(Icons.link),
-                    label: Text(_isLinking ? 'Đang liên kết...' : 'Xác nhận liên kết'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+  Widget _buildLinkEmployeeView(ThemeData theme) => const Center(
+    child: Padding(
+      padding: EdgeInsets.all(24),
+      child: Text(
+        'Tài khoản chưa liên kết hồ sơ nhân viên. Vui lòng liên hệ Admin để được cấp đúng hồ sơ.',
       ),
-    );
-  }
-
+    ),
+  );
   Widget _buildHistoryView(ThemeData theme, String employeeId) {
     final eventsAsync = ref.watch(myAttendanceEventsProvider(employeeId));
     final empAsync = ref.watch(employeeDetailProvider(employeeId));
@@ -283,11 +196,14 @@ class _MyHistoryPageState extends ConsumerState<MyHistoryPage> {
                   final ev = events[index];
                   final isCheckIn = ev.type == 'check_in';
                   final timeStr = DateFormat('HH:mm:ss').format(ev.occurredAt);
-                  final dateStr = DateFormat('dd/MM/yyyy').format(ev.occurredAt);
+                  final dateStr = DateFormat('dd/MM/yyyy')
+                      .format(ev.occurredAt);
 
-                  final isLate = isCheckIn &&
+                  final isLate =
+                      isCheckIn &&
                       (ev.occurredAt.hour > 9 ||
-                          (ev.occurredAt.hour == 9 && ev.occurredAt.minute > 0));
+                          (ev.occurredAt.hour == 9 &&
+                              ev.occurredAt.minute > 0));
                   final isEarlyLeave = !isCheckIn && (ev.occurredAt.hour < 18);
 
                   return Card(
@@ -295,12 +211,18 @@ class _MyHistoryPageState extends ConsumerState<MyHistoryPage> {
                       leading: CircleAvatar(
                         backgroundColor: isCheckIn
                             ? (isLate ? Colors.orange[100] : Colors.green[100])
-                            : (isEarlyLeave ? Colors.amber[100] : Colors.blue[100]),
+                            : (isEarlyLeave
+                                  ? Colors.amber[100]
+                                  : Colors.blue[100]),
                         child: Icon(
                           isCheckIn ? Icons.login : Icons.logout,
                           color: isCheckIn
-                              ? (isLate ? Colors.orange[800] : Colors.green[800])
-                              : (isEarlyLeave ? Colors.amber[800] : Colors.blue[800]),
+                              ? (isLate
+                                    ? Colors.orange[800]
+                                    : Colors.green[800])
+                              : (isEarlyLeave
+                                    ? Colors.amber[800]
+                                    : Colors.blue[800]),
                         ),
                       ),
                       title: Text(
@@ -308,8 +230,12 @@ class _MyHistoryPageState extends ConsumerState<MyHistoryPage> {
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: isCheckIn
-                              ? (isLate ? Colors.orange[800] : Colors.green[800])
-                              : (isEarlyLeave ? Colors.amber[900] : Colors.blue[800]),
+                              ? (isLate
+                                    ? Colors.orange[800]
+                                    : Colors.green[800])
+                              : (isEarlyLeave
+                                    ? Colors.amber[900]
+                                    : Colors.blue[800]),
                         ),
                       ),
                       subtitle: Text('$timeStr • $dateStr'),
@@ -319,7 +245,10 @@ class _MyHistoryPageState extends ConsumerState<MyHistoryPage> {
                         children: [
                           if (isLate)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.orange[100],
                                 borderRadius: BorderRadius.circular(4),
@@ -335,7 +264,10 @@ class _MyHistoryPageState extends ConsumerState<MyHistoryPage> {
                             )
                           else if (isEarlyLeave)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.amber[100],
                                 borderRadius: BorderRadius.circular(4),
@@ -351,7 +283,10 @@ class _MyHistoryPageState extends ConsumerState<MyHistoryPage> {
                             )
                           else
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.green[50],
                                 borderRadius: BorderRadius.circular(4),

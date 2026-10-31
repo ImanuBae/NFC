@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'device_config.dart';
@@ -63,13 +64,24 @@ class SyncService {
 
       for (final item in items) {
         try {
-          await rpcService.recordScan(
-            uid: item.uid,
-            deviceId: deviceId,
-            deviceTime: item.deviceTime,
-            clientScanId: item.clientScanId,
-            isReplay: true,
-          );
+          final result = await rpcService
+              .recordScan(
+                uid: item.uid,
+                deviceId: deviceId,
+                deviceTime: item.deviceTime,
+                clientScanId: item.clientScanId,
+                isReplay: true,
+              )
+              .timeout(const Duration(seconds: 10));
+          if (result is! Map ||
+              !const [
+                'ok',
+                'duplicate',
+                'ignored',
+                'rejected',
+              ].contains(result['status'])) {
+            throw StateError('Invalid scan synchronization response');
+          }
 
           // Any valid response from server means success -> remove item
           await store.remove(item.clientScanId);
@@ -80,6 +92,10 @@ class SyncService {
           break;
         }
       }
+    } catch (error) {
+      // Storage/plugin initialization can fail before an RPC is attempted.
+      // Keep the queue intact and allow the next scheduled retry.
+      debugPrint('Unable to sync pending scans: $error');
     } finally {
       _isFlushing = false;
     }
@@ -99,7 +115,7 @@ final isOnlineStreamProvider = StreamProvider<bool>((ref) {
   });
 });
 
-final syncServiceProvider = Provider<SyncService>((ref) {
+final syncServiceProvider = Provider.autoDispose<SyncService>((ref) {
   final store = ref.watch(pendingScanStoreProvider);
   final rpcService = ref.watch(kioskRpcServiceProvider);
   final deviceConfig = ref.watch(deviceConfigProvider);

@@ -17,6 +17,9 @@ migrate_working_dir/
 *.ipr
 *.iws
 .idea/
+.vs/
+*.suo
+*.user
 
 # The .vscode folder contains launch configuration and tasks you configure in
 # VS Code which you may wish to be included in version control, so this line
@@ -46,3 +49,15 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Local connection settings and server secrets
+config.local.json
+.env
+.env.server
+*.secrets.env
+.local-data/
+.migration-backup/
+**/bin/
+**/obj/
+server/**/appsettings.Local.json
+server/**/appsettings.Development.local.json

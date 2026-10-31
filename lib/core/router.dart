@@ -10,8 +10,12 @@ import '../features/admin/attendance/event_list_page.dart';
 import '../features/admin/cards/assign_card_page.dart';
 import '../features/admin/employees/employee_detail_page.dart';
 import '../features/admin/employees/employee_list_page.dart';
+import '../features/admin/employees/employee_import_page.dart';
 import '../features/auth/auth_repository.dart';
 import '../features/auth/login_page.dart';
+import '../features/business/accounts_page.dart';
+import '../features/business/reports_page.dart';
+import '../features/business/employee_home_page.dart';
 import '../features/kiosk/device_config.dart';
 import '../features/kiosk/kiosk_idle_page.dart';
 import '../features/kiosk/kiosk_setup_page.dart';
@@ -22,6 +26,8 @@ class RouterNotifier extends ChangeNotifier {
   String? _deviceId;
   bool _isInitialized = false;
   StreamSubscription? _authSub;
+  bool _disposed = false;
+  int _generation = 0;
 
   RouterNotifier(this._ref) {
     _init();
@@ -40,29 +46,33 @@ class RouterNotifier extends ChangeNotifier {
   }
 
   Future<void> refreshState() async {
+    if (_disposed) return;
+    final generation = ++_generation;
     final authRepo = _ref.read(authRepositoryProvider);
-    final deviceConfig = _ref.read(deviceConfigProvider);
-
+    String? role;
+    String? deviceId;
+    role = await authRepo.getCurrentUserRole();
     if (authRepo.currentUser != null) {
-      _userRole = await authRepo.getCurrentUserRole();
-      _deviceId = await deviceConfig.getDeviceId();
-    } else {
-      _userRole = null;
-      _deviceId = null;
+      deviceId = await _ref.read(deviceConfigProvider).getDeviceId();
     }
-
+    if (_disposed || generation != _generation) return;
+    _userRole = role;
+    _deviceId = deviceId;
     _isInitialized = true;
     notifyListeners();
   }
 
   @override
   void dispose() {
+    _disposed = true;
     _authSub?.cancel();
     super.dispose();
   }
 }
 
 final routerNotifierProvider = Provider<RouterNotifier>((ref) {
+  // Rebind the auth subscription when switching API servers.
+  ref.watch(authRepositoryProvider);
   final notifier = RouterNotifier(ref);
   ref.onDispose(notifier.dispose);
   return notifier;
@@ -92,6 +102,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           notifier.deviceId != null && notifier.deviceId!.isNotEmpty;
 
       if (role == 'kiosk') {
+        if (!state.matchedLocation.startsWith('/kiosk')) {
+          return hasDeviceId ? '/kiosk' : '/kiosk/setup';
+        }
         if (!hasDeviceId) {
           return state.matchedLocation == '/kiosk/setup'
               ? null
@@ -105,18 +118,33 @@ final routerProvider = Provider<GoRouter>((ref) {
         return null;
       }
 
-      if (role == 'admin') {
+      if (role == 'employee') {
+        return state.matchedLocation == '/me' ? null : '/me';
+      }
+
+      if (role == 'admin' || role == 'manager') {
+        if (role == 'manager' &&
+            (state.matchedLocation.startsWith('/admin/accounts') ||
+                state.matchedLocation.startsWith('/admin/employees'))) {
+          return '/admin/days';
+        }
+        if (role == 'manager' && state.matchedLocation == '/me') return null;
         if (state.matchedLocation.startsWith('/kiosk') ||
+            state.matchedLocation == '/me' ||
             state.matchedLocation == '/login') {
           return '/admin/days';
         }
         return null;
       }
 
-      return null;
+      return isLoggingIn ? null : '/login';
     },
     routes: [
       GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+      GoRoute(
+        path: '/me',
+        builder: (context, state) => const EmployeeHomePage(),
+      ),
       GoRoute(
         path: '/kiosk/setup',
         builder: (context, state) => const KioskSetupPage(),
@@ -129,6 +157,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state, child) => AdminShell(child: child),
         routes: [
           GoRoute(
+            path: '/admin/reports',
+            builder: (context, state) => const ReportsPage(),
+          ),
+          GoRoute(
+            path: '/admin/accounts',
+            builder: (context, state) => const AccountsPage(),
+          ),
+          GoRoute(
             path: '/admin/days',
             builder: (context, state) => const DayReportPage(),
           ),
@@ -136,6 +172,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/admin/employees',
             builder: (context, state) => const EmployeeListPage(),
             routes: [
+              GoRoute(
+                path: 'import',
+                builder: (context, state) => const EmployeeImportPage(),
+              ),
               GoRoute(
                 path: ':id',
                 builder: (context, state) {

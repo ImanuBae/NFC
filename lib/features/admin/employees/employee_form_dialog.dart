@@ -34,6 +34,7 @@ class _EmployeeFormDialogState extends State<EmployeeFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _codeController;
   late final TextEditingController _nameController;
+  late final TextEditingController _rateController;
   late bool _active;
   bool _isLoading = false;
   String? _error;
@@ -46,12 +47,16 @@ class _EmployeeFormDialogState extends State<EmployeeFormDialog> {
       text: widget.employee?.fullName ?? '',
     );
     _active = widget.employee?.active ?? true;
+    _rateController = TextEditingController(
+      text: (widget.employee?.hourlyRate ?? 0).toStringAsFixed(2),
+    );
   }
 
   @override
   void dispose() {
     _codeController.dispose();
     _nameController.dispose();
+    _rateController.dispose();
     super.dispose();
   }
 
@@ -69,6 +74,7 @@ class _EmployeeFormDialogState extends State<EmployeeFormDialog> {
           code: _codeController.text,
           fullName: _nameController.text,
           active: _active,
+          hourlyRate: double.parse(_rateController.text.trim()),
         );
       } else {
         await widget.repository.updateEmployee(
@@ -76,6 +82,7 @@ class _EmployeeFormDialogState extends State<EmployeeFormDialog> {
           code: _codeController.text,
           fullName: _nameController.text,
           active: _active,
+          hourlyRate: double.parse(_rateController.text.trim()),
         );
       }
       if (mounted) Navigator.of(context).pop(true);
@@ -123,6 +130,22 @@ class _EmployeeFormDialogState extends State<EmployeeFormDialog> {
                 },
               ),
               const SizedBox(height: 16),
+              TextFormField(
+                controller: _rateController,
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(labelText: 'Đơn giá VND/giờ'),
+                validator: (v) {
+                  final amount = double.tryParse(v?.trim() ?? '');
+                  return amount == null ||
+                          !amount.isFinite ||
+                          amount < 0 ||
+                          amount > 999999999999
+                      ? 'Nhập đơn giá hợp lệ, không âm'
+                      : null;
+                },
+              ),
               SwitchListTile(
                 title: const Text(S.employeeStatus),
                 subtitle: Text(_active ? S.active : S.inactive),

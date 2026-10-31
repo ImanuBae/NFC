@@ -2,12 +2,16 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.NFC" />
-    <uses-feature android:name="android.hardware.nfc" android:required="true" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera.front" android:required="false" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
 
     <application
         android:label="demo_nfc"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <activity android:name=".FaceCameraActivity" android:exported="false"
+            android:screenOrientation="portrait" android:theme="@style/NormalTheme" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -3,6 +3,7 @@ import 'package:demo_nfc/features/kiosk/device_config.dart';
 import 'package:demo_nfc/features/kiosk/scan_coordinator.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:demo_nfc/core/api_client.dart';
 
 class MockKioskRpcService extends Mock implements KioskRpcService {}
 
@@ -23,6 +24,11 @@ void main() {
 
     when(() => mockDeviceConfig.getDeviceId())
         .thenAnswer((_) async => 'dev-uuid-123');
+    when(
+      () => mockDeviceConfig.clearDeviceId(
+        expectedDeviceId: any(named: 'expectedDeviceId'),
+      ),
+    ).thenAnswer((_) async {});
 
     coordinator = ScanCoordinator(
       rpcService: mockRpcService,
@@ -32,6 +38,81 @@ void main() {
   });
 
   group('ScanCoordinator', () {
+    test(
+      'missing registration requests setup without calling the server',
+      () async {
+        when(() => mockDeviceConfig.getDeviceId())
+            .thenAnswer((_) async => null);
+        final result = await coordinator.handleUid('04AABB') as ScanFailure;
+        expect(result.requiresDeviceSetup, isTrue);
+        verifyNever(
+          () => mockRpcService.recordScan(
+            uid: any(named: 'uid'),
+            deviceId: any(named: 'deviceId'),
+            deviceTime: any(named: 'deviceTime'),
+            clientScanId: any(named: 'clientScanId'),
+            isReplay: any(named: 'isReplay'),
+          ),
+        );
+      },
+    );
+
+    test(
+      'device rejection offers setup and is never queued as offline',
+      () async {
+        when(
+          () => mockRpcService.recordScan(
+            uid: any(named: 'uid'),
+            deviceId: any(named: 'deviceId'),
+            deviceTime: any(named: 'deviceTime'),
+            clientScanId: any(named: 'clientScanId'),
+            isReplay: any(named: 'isReplay'),
+          ),
+        ).thenThrow(
+          const ApiException('Unregistered or inactive device', status: 403),
+        );
+        final result = await coordinator.handleUid('04AABB') as ScanFailure;
+        expect(result.requiresDeviceSetup, isTrue);
+        expect(result.message, isNot(contains('Unregistered')));
+        verify(
+          () =>
+              mockDeviceConfig.clearDeviceId(expectedDeviceId: 'dev-uuid-123'),
+        ).called(1);
+        verifyNever(
+          () => mockOfflineQueue.enqueue(
+            clientScanId: any(named: 'clientScanId'),
+            uid: any(named: 'uid'),
+            deviceTime: any(named: 'deviceTime'),
+          ),
+        );
+      },
+    );
+
+    test(
+      'server permission error is not reported or queued as an offline scan',
+      () async {
+        when(
+          () => mockRpcService.recordScan(
+            uid: any(named: 'uid'),
+            deviceId: any(named: 'deviceId'),
+            deviceTime: any(named: 'deviceTime'),
+            clientScanId: any(named: 'clientScanId'),
+            isReplay: any(named: 'isReplay'),
+          ),
+        ).thenThrow(
+          const ApiException('Inactive device', status: 403, code: '42501'),
+        );
+        expect(await coordinator.handleUid('04AABB'), isA<ScanFailure>());
+        verifyNever(
+          () => mockOfflineQueue.enqueue(
+            clientScanId: any(named: 'clientScanId'),
+            uid: any(named: 'uid'),
+            deviceTime: any(named: 'deviceTime'),
+          ),
+        );
+      },
+    );
+
     test('maps ok check_in response correctly', () async {
       when(
         () => mockRpcService.recordScan(

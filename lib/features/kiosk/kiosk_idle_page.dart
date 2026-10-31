@@ -9,13 +9,14 @@ import 'package:intl/intl.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../../core/result.dart';
+import '../../core/router.dart';
 import '../../core/strings.dart';
 import '../auth/auth_repository.dart';
+import '../business/face_camera_service.dart';
 import 'device_config.dart';
 import 'fake_scan_dialog.dart';
 import 'kiosk_pin_dialog.dart';
 import 'kiosk_result_view.dart';
-import 'my_history_page.dart';
 import 'nfc_service.dart';
 import 'pending_scan_store.dart';
 import 'scan_coordinator.dart';
@@ -35,7 +36,8 @@ class _KioskIdlePageState extends ConsumerState<KioskIdlePage> {
   ScanResult? _currentResult;
   Timer? _resultDismissTimer;
   StreamSubscription<String>? _nfcSub;
-  int _tabIndex = 0;
+  bool _faceMode = false;
+  bool _faceBusy = false;
 
   @override
   void initState() {
@@ -67,11 +69,12 @@ class _KioskIdlePageState extends ConsumerState<KioskIdlePage> {
     } catch (_) {
       _nfcAvailable = false;
     }
+    _faceMode = !_nfcAvailable;
     if (mounted) setState(() {});
   }
 
   void _onUidScanned(String uid) async {
-    if (_currentResult != null) return;
+    if (_currentResult != null || _faceMode || _faceBusy) return;
 
     final coordinator = ref.read(scanCoordinatorProvider);
     final result = await coordinator.handleUid(uid);
@@ -83,6 +86,7 @@ class _KioskIdlePageState extends ConsumerState<KioskIdlePage> {
   void _showResult(ScanResult result) {
     _resultDismissTimer?.cancel();
     setState(() => _currentResult = result);
+    if (result is ScanFailure && result.requiresDeviceSetup) return;
 
     _resultDismissTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) {
@@ -91,8 +95,66 @@ class _KioskIdlePageState extends ConsumerState<KioskIdlePage> {
     });
   }
 
+  Future<void> _scanFace(String purpose) async {
+    if (_faceBusy || _currentResult != null) return;
+    setState(() => _faceBusy = true);
+    try {
+      final deviceId = await ref.read(deviceConfigProvider).getDeviceId();
+      if (deviceId == null) {
+        if (mounted) {
+          _showResult(
+            const ScanFailure(
+              'Máy chưa được đăng ký.',
+              requiresDeviceSetup: true,
+            ),
+          );
+        }
+        return;
+      }
+      final result = await ref
+          .read(faceCameraServiceProvider)
+          .submit(purpose, deviceId: deviceId);
+      if (!mounted) return;
+      _showResult(
+        ScanOk(
+          isCheckIn: result['type'] == 'check_in',
+          name: result['employee_name'] as String,
+          code: result['employee_code'] as String,
+          at: DateTime.parse(result['occurred_at'] as String).toLocal(),
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _faceBusy = false);
+    }
+  }
+
   void _onLogoLongPressed() {
     KioskPinDialog.show(context, onAuthorized: () => _showExitOptions());
+  }
+
+  void _recoverDevice() {
+    KioskPinDialog.show(
+      context,
+      onAuthorized: () async {
+        try {
+          await ref.read(deviceConfigProvider).clearDeviceId();
+          if (!mounted) return;
+          await ref.read(routerNotifierProvider).refreshState();
+          if (mounted) context.go('/kiosk/setup');
+        } catch (error) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Không thể thiết lập lại máy: $error')),
+            );
+          }
+        }
+      },
+    );
   }
 
   void _showExitOptions() {
@@ -107,6 +169,8 @@ class _KioskIdlePageState extends ConsumerState<KioskIdlePage> {
               onTap: () async {
                 Navigator.of(ctx).pop();
                 await ref.read(deviceConfigProvider).clearDeviceId();
+                if (!mounted) return;
+                await ref.read(routerNotifierProvider).refreshState();
                 if (mounted) {
                   context.go('/kiosk/setup');
                 }
@@ -131,7 +195,9 @@ class _KioskIdlePageState extends ConsumerState<KioskIdlePage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Đăng xuất'),
-        content: const Text('Bạn có chắc chắn muốn đăng xuất khỏi tài khoản này?'),
+        content: const Text(
+          'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản này?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
@@ -163,8 +229,13 @@ class _KioskIdlePageState extends ConsumerState<KioskIdlePage> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(syncServiceProvider);
+
     if (_currentResult != null) {
-      return KioskResultView(result: _currentResult!);
+      return KioskResultView(
+        result: _currentResult!,
+        onDeviceSetup: _recoverDevice,
+      );
     }
 
     final nfc = ref.watch(nfcServiceProvider);
@@ -172,7 +243,7 @@ class _KioskIdlePageState extends ConsumerState<KioskIdlePage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_tabIndex == 0 ? 'Máy chấm công Kiosk' : 'Lịch sử của tôi'),
+        title: const Text('Điểm chấm công'),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
@@ -181,22 +252,22 @@ class _KioskIdlePageState extends ConsumerState<KioskIdlePage> {
           ),
         ],
       ),
-      body: _tabIndex == 0
-          ? _buildClockBody(theme, nfc)
-          : const MyHistoryPage(),
+      body: _buildClockBody(theme, nfc),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _tabIndex,
-        onDestinationSelected: (idx) => setState(() => _tabIndex = idx),
+        selectedIndex: _faceMode ? 1 : 0,
+        onDestinationSelected: _faceBusy
+            ? null
+            : (idx) => setState(() => _faceMode = idx == 1),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.nfc_outlined),
             selectedIcon: Icon(Icons.nfc),
-            label: 'Chấm công',
+            label: 'Thẻ NFC',
           ),
           NavigationDestination(
-            icon: Icon(Icons.history_outlined),
-            selectedIcon: Icon(Icons.history),
-            label: 'Lịch sử của tôi',
+            icon: Icon(Icons.face_outlined),
+            selectedIcon: Icon(Icons.face),
+            label: 'Khuôn mặt',
           ),
         ],
       ),
@@ -204,190 +275,253 @@ class _KioskIdlePageState extends ConsumerState<KioskIdlePage> {
   }
 
   Widget _buildClockBody(ThemeData theme, NfcService nfc) {
-    final timeStr = DateFormat('HH:mm:ss').format(_currentTime);
-    String dateStr;
+    final scheme = theme.colorScheme;
+    final isOnline = ref.watch(isOnlineStreamProvider).value ?? true;
+    final pending = ref.watch(pendingCountProvider).value ?? 0;
+    final time = DateFormat('HH:mm:ss').format(_currentTime);
+    String date;
     try {
-      dateStr = DateFormat('EEEE, dd/MM/yyyy', 'vi_VN').format(_currentTime);
+      date = DateFormat('EEEE, dd/MM/yyyy', 'vi_VN').format(_currentTime);
     } catch (_) {
-      dateStr = DateFormat('dd/MM/yyyy').format(_currentTime);
+      date = DateFormat('dd/MM/yyyy').format(_currentTime);
     }
-
+    final ready = _faceMode || _nfcAvailable;
     return SafeArea(
-      child: Stack(
-        children: [
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+      child: LayoutBuilder(
+        builder: (context, box) => Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: ListView(
+              padding: const EdgeInsets.all(20),
               children: [
-                GestureDetector(
-                  onLongPress: _onLogoLongPressed,
-                  child: Icon(
-                    Icons.nfc_rounded,
-                    size: 96,
-                    color: theme.colorScheme.primary,
-                  ),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Chip(
+                      avatar: Icon(
+                        isOnline ? Icons.wifi : Icons.wifi_off,
+                        size: 18,
+                      ),
+                      label: Text(
+                        isOnline ? 'Có kết nối mạng' : 'Đang ngoại tuyến',
+                      ),
+                    ),
+                    if (pending > 0)
+                      Chip(
+                        avatar: const Icon(Icons.sync, size: 18),
+                        label: Text('$pending chờ đồng bộ'),
+                      ),
+                  ],
                 ),
-                const SizedBox(height: 32),
-                Text(
-                  timeStr,
-                  style: theme.textTheme.displayLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 56,
-                    letterSpacing: 2,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  dateStr,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 24,
-                    vertical: 12,
+                    vertical: 20,
                   ),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(30),
-                  ),
-                  child: Text(
-                    S.tapCardPrompt,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onPrimaryContainer,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-                    ),
+                    color: scheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(28),
                   ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.schedule,
-                            size: 18,
-                            color: theme.colorScheme.primary,
+                      Text(
+                        'THỜI GIAN HIỆN TẠI',
+                        style: TextStyle(
+                          color: scheme.onPrimaryContainer,
+                          fontSize: 11,
+                          letterSpacing: 1.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          time,
+                          style: TextStyle(
+                            color: scheme.onPrimaryContainer,
+                            fontSize: 44,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 2,
                           ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Khung giờ làm việc: 09:00 - 18:00',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                              color: theme.colorScheme.onSurface,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Vào ca: trước 09:00 • Tan ca: từ 18:00',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
+                        date,
+                        style: TextStyle(color: scheme.onPrimaryContainer),
                       ),
                     ],
                   ),
                 ),
+                const SizedBox(height: 20),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      children: [
+                        GestureDetector(
+                          onLongPress: _onLogoLongPressed,
+                          child: Container(
+                            width: 112,
+                            height: 112,
+                            decoration: BoxDecoration(
+                              color: scheme.primaryContainer,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              _faceMode
+                                  ? Icons.face_retouching_natural
+                                  : Icons.nfc_rounded,
+                              size: 60,
+                              color: scheme.primary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        Text(
+                          _faceMode
+                              ? 'Chấm công bằng khuôn mặt'
+                              : 'Chạm thẻ NFC',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          _faceMode
+                              ? 'Chọn vào làm hoặc ra về. Nhìn thẳng vào camera và giữ yên.'
+                              : 'Đưa thẻ lại gần vùng NFC của điện thoại và giữ trong giây lát.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: scheme.onSurfaceVariant,
+                            height: 1.5,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        if (!_faceMode)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: ready
+                                  ? scheme.primaryContainer
+                                  : scheme.errorContainer,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  ready
+                                      ? Icons.contactless_outlined
+                                      : Icons.warning_amber_rounded,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    ready
+                                        ? 'Sẵn sàng nhận thẻ'
+                                        : S.nfcDisabledWarning,
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (_faceMode) ...[
+                          if (_faceBusy)
+                            const Padding(
+                              padding: EdgeInsets.only(bottom: 12),
+                              child: LinearProgressIndicator(),
+                            ),
+                          SizedBox(
+                            width: double.infinity,
+                            child: FilledButton.icon(
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size.fromHeight(56),
+                              ),
+                              onPressed: _faceBusy
+                                  ? null
+                                  : () => _scanFace('check_in'),
+                              icon: const Icon(Icons.login),
+                              label: const Text('Vào làm bằng khuôn mặt'),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                minimumSize: const Size.fromHeight(56),
+                              ),
+                              onPressed: _faceBusy
+                                  ? null
+                                  : () => _scanFace('check_out'),
+                              icon: const Icon(Icons.logout),
+                              label: const Text('Ra về bằng khuôn mặt'),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 22),
+                        const Divider(),
+                        const SizedBox(height: 12),
+                        const Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.verified_user_outlined, size: 20),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Kiểm tra họ tên và kết quả sau mỗi lượt chấm công. Máy dùng chung, không cần đăng nhập tài khoản nhân viên.',
+                                style: TextStyle(fontSize: 12, height: 1.5),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Card(
+                  child: const ListTile(
+                    leading: Icon(Icons.schedule_outlined),
+                    title: Text('Ca chuẩn 09:00 – 18:00'),
+                    subtitle: Text(
+                      'Xem giờ đã làm và công còn thiếu trong cổng nhân viên.',
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Chọn Thẻ NFC hoặc Khuôn mặt ở thanh bên dưới.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: scheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                ),
+                if (nfc is FakeNfcService && !_faceMode)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: OutlinedButton.icon(
+                      onPressed: () => FakeScanDialog.show(context, nfc),
+                      icon: const Icon(Icons.touch_app),
+                      label: const Text(S.fakeNfcButton),
+                    ),
+                  ),
               ],
             ),
           ),
-          Positioned(
-            top: 16,
-            left: 16,
-            child: Builder(
-              builder: (context) {
-                final isOnline =
-                    ref.watch(isOnlineStreamProvider).value ?? true;
-                final pendingCount =
-                    ref.watch(pendingCountProvider).value ?? 0;
-                final statusText = isOnline
-                    ? (pendingCount > 0
-                          ? '${S.onlineStatus} ($pendingCount chờ đồng bộ)'
-                          : S.onlineStatus)
-                    : (pendingCount > 0
-                          ? '${S.offlineStatus} ($pendingCount chờ đồng bộ)'
-                          : S.offlineStatus);
-
-                return Row(
-                  children: [
-                    Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: isOnline ? Colors.green : Colors.amber[700],
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      statusText,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-          if (!_nfcAvailable)
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                color: Colors.red[800],
-                padding: const EdgeInsets.symmetric(
-                  vertical: 8,
-                  horizontal: 16,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.warning, color: Colors.white, size: 20),
-                    const SizedBox(width: 8),
-                    const Text(
-                      S.nfcDisabledWarning,
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          if (nfc is FakeNfcService)
-            Positioned(
-              bottom: 24,
-              right: 24,
-              child: FloatingActionButton.extended(
-                onPressed: () => FakeScanDialog.show(context, nfc),
-                icon: const Icon(Icons.touch_app),
-                label: const Text(S.fakeNfcButton),
-              ),
-            ),
-        ],
+        ),
       ),
     );
   }

@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:demo_nfc/features/kiosk/device_config.dart';
 import 'package:demo_nfc/features/kiosk/pending_scan_store.dart';
 import 'package:demo_nfc/features/kiosk/scan_coordinator.dart';
 import 'package:demo_nfc/features/kiosk/sync_service.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mocktail/mocktail.dart';
 
 class MockKioskRpcService extends Mock implements KioskRpcService {}
@@ -11,6 +14,8 @@ class MockKioskRpcService extends Mock implements KioskRpcService {}
 class MockDeviceConfig extends Mock implements DeviceConfig {}
 
 class MockConnectivity extends Mock implements Connectivity {}
+
+class MockPendingScanStore extends Mock implements PendingScanStore {}
 
 void main() {
   late InMemoryPendingScanStore store;
@@ -37,6 +42,84 @@ void main() {
   });
 
   group('SyncService', () {
+    test(
+      'keeps queued attendance when the server returns an unknown status',
+      () async {
+        await store.enqueue(
+          clientScanId: 'pending',
+          uid: '04AABB',
+          deviceTime: DateTime.utc(2026, 1, 1),
+        );
+        when(
+          () => mockRpcService.recordScan(
+            uid: any(named: 'uid'),
+            deviceId: any(named: 'deviceId'),
+            deviceTime: any(named: 'deviceTime'),
+            clientScanId: any(named: 'clientScanId'),
+            isReplay: any(named: 'isReplay'),
+          ),
+        ).thenAnswer((_) async => {'status': 'unknown'});
+        expect(await syncService.flush(), 0);
+        expect(await store.count(), 1);
+        expect((await store.listOrdered()).single.attempts, 1);
+      },
+    );
+
+    test('provider starts syncing and stops listening when disposed', () async {
+      final changes = StreamController<List<ConnectivityResult>>.broadcast();
+      addTearDown(changes.close);
+      when(() => mockConnectivity.onConnectivityChanged)
+          .thenAnswer((_) => changes.stream);
+      await store.enqueue(
+        clientScanId: 'pending-at-startup',
+        uid: 'UID1',
+        deviceTime: DateTime.utc(2026, 9, 28),
+      );
+      when(
+        () => mockRpcService.recordScan(
+          uid: any(named: 'uid'),
+          deviceId: any(named: 'deviceId'),
+          deviceTime: any(named: 'deviceTime'),
+          clientScanId: any(named: 'clientScanId'),
+          isReplay: any(named: 'isReplay'),
+        ),
+      ).thenAnswer((_) async => {'status': 'ok'});
+
+      final container = ProviderContainer(
+        overrides: [
+          pendingScanStoreProvider.overrideWithValue(store),
+          kioskRpcServiceProvider.overrideWithValue(mockRpcService),
+          deviceConfigProvider.overrideWithValue(mockDeviceConfig),
+          connectivityProvider.overrideWithValue(mockConnectivity),
+        ],
+      );
+      addTearDown(container.dispose);
+      final subscription = container.listen(syncServiceProvider, (_, _) {});
+      await Future<void>.delayed(Duration.zero);
+
+      expect(await store.count(), 0);
+      expect(changes.hasListener, isTrue);
+      subscription.close();
+      await container.pump();
+      expect(changes.hasListener, isFalse);
+    });
+
+    test('storage failure does not leave syncing locked', () async {
+      final brokenStore = MockPendingScanStore();
+      when(() => brokenStore.listOrdered()).thenThrow(StateError('DB failed'));
+      final service = SyncService(
+        store: brokenStore,
+        rpcService: mockRpcService,
+        deviceConfig: mockDeviceConfig,
+        connectivity: mockConnectivity,
+      );
+      expect(await service.flush(), 0);
+      expect(service.isFlushing, isFalse);
+      when(() => brokenStore.listOrdered()).thenAnswer((_) async => []);
+      expect(await service.flush(), 0);
+      expect(service.isFlushing, isFalse);
+    });
+
     test(
       'flushes items in device_time ascending order and removes on success',
       () async {

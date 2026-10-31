@@ -1,5 +1,6 @@
 import 'package:demo_nfc/features/kiosk/pending_scan_store.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 void main() {
   late InMemoryPendingScanStore store;
@@ -9,6 +10,21 @@ void main() {
   });
 
   group('PendingScanStore', () {
+    test('pending count includes scans saved before subscribing', () async {
+      await store.enqueue(
+        clientScanId: 'existing-scan',
+        uid: 'UID1',
+        deviceTime: DateTime.utc(2026, 9, 28),
+      );
+      final container = ProviderContainer(
+        overrides: [pendingScanStoreProvider.overrideWithValue(store)],
+      );
+      addTearDown(container.dispose);
+      final subscription = container.listen(pendingCountProvider, (_, _) {});
+      addTearDown(subscription.close);
+      expect(await container.read(pendingCountProvider.future), 1);
+    });
+
     test('enqueues items and reports count correctly', () async {
       expect(await store.count(), equals(0));
 

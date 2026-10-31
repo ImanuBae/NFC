@@ -1,11 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../../core/supabase_client.dart';
+import '../../core/api_client.dart';
+export '../../core/api_client.dart' show AppUser;
 
 abstract class AuthRepository {
-  Stream<AuthState> get authStateChanges;
-  User? get currentUser;
+  Stream<AppUser?> get authStateChanges;
+  AppUser? get currentUser;
   Future<void> signIn({required String email, required String password});
   Future<void> signOut();
   Future<String?> getCurrentUserRole();
@@ -13,55 +13,23 @@ abstract class AuthRepository {
   Future<void> linkCurrentEmployee(String employeeId);
 }
 
-class SupabaseAuthRepository implements AuthRepository {
-  final SupabaseClient _client;
-
-  SupabaseAuthRepository(this._client);
-
+class ApiAuthRepository implements AuthRepository {
+  ApiAuthRepository(this.client);
+  final ApiClient client;
   @override
-  Stream<AuthState> get authStateChanges => _client.auth.onAuthStateChange;
-
+  Stream<AppUser?> get authStateChanges => client.authChanges;
   @override
-  User? get currentUser => _client.auth.currentUser;
-
+  AppUser? get currentUser => client.currentUser;
   @override
-  Future<void> signIn({required String email, required String password}) async {
-    try {
-      await _client.auth.signInWithPassword(
-        email: email.trim(),
-        password: password,
-      );
-    } on AuthException {
-      if (password.trim() != password) {
-        await _client.auth.signInWithPassword(
-          email: email.trim(),
-          password: password.trim(),
-        );
-      } else {
-        rethrow;
-      }
-    }
-  }
-
+  Future<void> signIn({required String email, required String password}) =>
+      client.signIn(email, password);
   @override
-  Future<void> signOut() async {
-    await _client.auth.signOut();
-  }
-
+  Future<void> signOut() => client.signOut();
   @override
   Future<String?> getCurrentUserRole() async {
-    final user = currentUser;
-    if (user == null) return null;
-
     try {
-      final response = await _client
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .maybeSingle();
-
-      if (response == null) return null;
-      return response['role'] as String?;
+      await client.initialize();
+      return (await client.me())?.role;
     } catch (_) {
       return null;
     }
@@ -69,45 +37,28 @@ class SupabaseAuthRepository implements AuthRepository {
 
   @override
   Future<String?> getCurrentUserEmployeeId() async {
-    final user = currentUser;
-    if (user == null) return null;
-
-    try {
-      final response = await _client
-          .from('profiles')
-          .select('employee_id')
-          .eq('id', user.id)
-          .maybeSingle();
-
-      if (response == null) return null;
-      return response['employee_id'] as String?;
-    } catch (_) {
-      return null;
-    }
+    await client.initialize();
+    return (await client.me())?.employeeId;
   }
 
   @override
-  Future<void> linkCurrentEmployee(String employeeId) async {
-    final user = currentUser;
-    if (user == null) return;
-    await _client
-        .from('profiles')
-        .update({'employee_id': employeeId})
-        .eq('id', user.id);
-  }
+  Future<void> linkCurrentEmployee(String employeeId) async =>
+      throw StateError('Employee links are assigned by Admin.');
 }
 
-final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  final client = ref.watch(supabaseClientProvider);
-  return SupabaseAuthRepository(client);
+final authRepositoryProvider = Provider<AuthRepository>(
+  (ref) => ApiAuthRepository(ref.watch(apiClientProvider)),
+);
+final authStateProvider = StreamProvider<AppUser?>(
+  (ref) => ref.watch(authRepositoryProvider).authStateChanges,
+);
+final currentRoleProvider = FutureProvider.autoDispose<String?>((ref) {
+  ref.watch(authStateProvider);
+  return ref.watch(authRepositoryProvider).getCurrentUserRole();
 });
-
-final authStateProvider = StreamProvider<AuthState>((ref) {
-  final repo = ref.watch(authRepositoryProvider);
-  return repo.authStateChanges;
-});
-
-final currentUserEmployeeIdProvider = FutureProvider.autoDispose<String?>((ref) async {
-  final repo = ref.watch(authRepositoryProvider);
-  return repo.getCurrentUserEmployeeId();
+final currentUserEmployeeIdProvider = FutureProvider.autoDispose<String?>((
+  ref,
+) {
+  ref.watch(authStateProvider);
+  return ref.watch(authRepositoryProvider).getCurrentUserEmployeeId();
 });

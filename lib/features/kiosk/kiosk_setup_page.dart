@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/strings.dart';
-import '../../core/supabase_client.dart';
+import '../../core/router.dart';
+import '../../core/api_client.dart';
 import 'device_config.dart';
 
 class KioskSetupPage extends ConsumerStatefulWidget {
@@ -34,14 +35,28 @@ class _KioskSetupPageState extends ConsumerState<KioskSetupPage> {
     });
 
     try {
-      final client = ref.read(supabaseClientProvider);
-      final response = await client.rpc(
-        'register_device',
-        params: {'p_name': _nameController.text.trim()},
+      final client = ref.read(apiClientProvider);
+      final accountId = client.currentUser?.id;
+      if (accountId == null) {
+        throw const ApiException(
+          'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+          status: 401,
+        );
+      }
+      final response = await client.request(
+        'POST',
+        '/devices',
+        body: {'name': _nameController.text.trim()},
       );
-
-      final deviceId = response as String;
-      await ref.read(deviceConfigProvider).saveDeviceId(deviceId);
+      final deviceId = (response as Map)['id'] as String;
+      // Bind the response to the account that sent the registration request,
+      // even if a different account logs in while it is in flight.
+      await DeviceConfig(
+        accountId: accountId,
+        projectUrl: client.baseUrl,
+      ).saveDeviceId(deviceId);
+      if (!mounted || client.currentUser?.id != accountId) return;
+      await ref.read(routerNotifierProvider).refreshState();
 
       // Reload/redirect will take user to /kiosk
       if (mounted) {

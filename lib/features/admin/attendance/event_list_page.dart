@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -22,7 +24,15 @@ final eventListProvider = FutureProvider.family
           date = DateTime.parse(dateStr);
         } catch (_) {}
       }
-      return repo.getEvents(employeeId: empId, date: date);
+      Timer? refresh;
+      ref.onDispose(() => refresh?.cancel());
+      try {
+        return await repo.getEvents(employeeId: empId, date: date);
+      } finally {
+        if (ref.mounted) {
+          refresh = Timer(const Duration(seconds: 2), ref.invalidateSelf);
+        }
+      }
     });
 
 class EventListPage extends ConsumerWidget {
@@ -136,6 +146,10 @@ class EventListPage extends ConsumerWidget {
                               child: Text(
                                 ev.source == 'manual'
                                     ? S.sourceManual
+                                    : ev.source == 'biometric'
+                                    ? 'Sinh trắc học cũ'
+                                    : ev.source == 'face_camera'
+                                    ? 'Khuôn mặt camera'
                                     : S.sourceNfc,
                                 style: const TextStyle(
                                   fontSize: 10,

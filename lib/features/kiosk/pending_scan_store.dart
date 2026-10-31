@@ -227,7 +227,8 @@ final pendingScanStoreProvider = Provider<PendingScanStore>((ref) {
   return SqflitePendingScanStore();
 });
 
-final pendingCountProvider = StreamProvider<int>((ref) {
+final pendingCountProvider = StreamProvider<int>((ref) async* {
   final store = ref.watch(pendingScanStoreProvider);
-  return store.pendingCountStream;
+  yield await store.count();
+  yield* store.pendingCountStream;
 });
