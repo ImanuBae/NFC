@@ -154,6 +154,15 @@ mỗi 2 giây kể từ khi yêu cầu trước hoàn tất, giữ nguyên bộ 
 Lượt NFC/khuôn mặt mới không cần reload thủ công; thời gian hiển thị còn phụ thuộc
 tốc độ mạng. Khi cập nhật mã Flutter web đang chạy, hot restart một lần để nạp bản mới.
 
+Khi đang mở **Tổng quan chấm công**, lượt mới xuất hiện sau lần tải đầu sẽ hiện
+thẻ thông báo nhỏ ở **góc trên bên phải**, gồm mã/tên nhân viên, phương thức
+NFC/khuôn mặt, giờ và loại lượt vào/ra. Hiển thị tối đa 3 thông báo cùng lúc;
+mỗi thông báo tự đóng sau 8 giây hoặc có thể đóng bằng nút ×. Dữ liệu cũ ở lần
+mở trang đầu tiên và khi đổi ngày không được thông báo lại. Thông báo theo ngày
+đang chọn; khi demo cần chọn hôm nay và để trang tải xong trước khi quét.
+Đây là cơ chế tải định kỳ, không phải kết nối đẩy tức thời; các thao tác chỉ xem
+lịch sử hoặc bảng lương trên điện thoại không tạo thông báo chấm công.
+
 ## Camera
 
 Kiosk có hai mục **Thẻ NFC** và **Khuôn mặt**. Máy Android không có NFC (như máy ảo)

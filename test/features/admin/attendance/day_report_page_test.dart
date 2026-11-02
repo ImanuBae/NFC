@@ -101,7 +101,7 @@ void main() {
       );
       await tester.pumpWidget(buildWidget());
       await tester.pumpAndSettle();
-      expect(find.byType(MaterialBanner), findsNothing);
+      expect(find.text('Chấm công mới'), findsNothing);
       await tester.scrollUntilVisible(
         find.textContaining('Dự kiến đủ công lúc 18:30'),
         180,
@@ -111,13 +111,24 @@ void main() {
       event = 'nfc-scan';
       await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
-      expect(find.byType(MaterialBanner), findsOneWidget);
+      expect(find.text('Chấm công mới'), findsOneWidget);
       expect(find.textContaining('Vào ca lúc 09:30 · NFC'), findsOneWidget);
-      await tester.tap(find.text('Đóng'));
+      final notice = tester.getRect(
+        find.byKey(const ValueKey('attendance-notice-nfc-scan')),
+      );
+      expect(
+        notice.right,
+        closeTo(
+          tester.view.physicalSize.width / tester.view.devicePixelRatio - 12,
+          1,
+        ),
+      );
+      expect(notice.top, 12);
+      await tester.tap(find.byTooltip('Đóng thông báo'));
       await tester.pumpAndSettle();
       await tester.pump(const Duration(seconds: 2));
       await tester.pumpAndSettle();
-      expect(find.byType(MaterialBanner), findsNothing);
+      expect(find.text('Chấm công mới'), findsNothing);
       event = 'face-scan';
       source = 'face_camera';
       type = 'check_out';
@@ -133,8 +144,59 @@ void main() {
         scrollable: find.byType(Scrollable).first,
       );
       expect(find.text('Đã ra ca'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 8));
+      await tester.pumpAndSettle();
+      expect(find.text('Chấm công mới'), findsNothing);
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(find.text('Chấm công mới'), findsNothing);
       await tester.pumpWidget(const SizedBox.shrink());
     });
+
+    testWidgets(
+      'shows simultaneous scans on a narrow screen and clears on date change',
+      (tester) async {
+        tester.view.physicalSize = const Size(360, 800);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        var scanned = false;
+        when(() => mockAttendanceRepo.getDayReport(any())).thenAnswer(
+          (_) async => [
+            for (var i = 0; i < 2; i++)
+              DayReportItem(
+                employeeId: 'e$i',
+                employeeCode: 'NV0$i',
+                employeeName: i == 0 ? 'Hoài Hiếu' : 'Nhân viên B',
+                workDate: DateTime.now(),
+                workedMinutes: 0,
+                missingCheckout: false,
+                isLate: false,
+                lastEventId: scanned ? 'scan-$i' : null,
+                lastEventSource: i == 0 ? 'face_camera' : 'nfc',
+                lastEventType: 'check_in',
+                lastEventAt: scanned ? DateTime.now() : null,
+              ),
+          ],
+        );
+        await tester.pumpWidget(buildWidget());
+        await tester.pumpAndSettle();
+        scanned = true;
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pumpAndSettle();
+        expect(find.text('Chấm công mới'), findsNWidgets(2));
+        expect(find.text('Vừa vào ca bằng khuôn mặt'), findsOneWidget);
+        expect(find.text('Vừa vào ca bằng NFC'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        final context = tester.element(find.byType(DayReportPage));
+        ProviderScope.containerOf(context)
+            .read(selectedDateProvider.notifier)
+            .setDate(DateTime(2026, 1, 1));
+        await tester.pumpAndSettle();
+        expect(find.text('Chấm công mới'), findsNothing);
+        await tester.pumpWidget(const SizedBox.shrink());
+      },
+    );
 
     testWidgets('new attendance appears automatically without manual refresh', (
       tester,
