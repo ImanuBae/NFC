@@ -6,6 +6,7 @@ import 'employee_model.dart';
 abstract class EmployeeRepository {
   Future<List<Employee>> getEmployees({String? query, bool? activeOnly});
   Future<Employee?> getEmployeeById(String id);
+  Future<void> deleteEmployee(String id);
   Future<Employee> createEmployee({
     required String code,
     required String fullName,
@@ -24,6 +25,11 @@ abstract class EmployeeRepository {
 class ApiEmployeeRepository implements EmployeeRepository {
   ApiEmployeeRepository(this.client);
   final ApiClient client;
+  @override
+  Future<void> deleteEmployee(String id) async {
+    await client.request('DELETE', '/employees/$id');
+  }
+
   @override
   Future<List<Employee>> getEmployees({
     String? query,

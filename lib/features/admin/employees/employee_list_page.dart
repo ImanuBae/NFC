@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/strings.dart';
 import 'employee_form_dialog.dart';
+import 'employee_delete_button.dart';
 import 'employee_model.dart';
 import 'employee_repository.dart';
 
@@ -144,7 +145,17 @@ class EmployeeListPage extends ConsumerWidget {
                             color: emp.active ? Colors.green[700] : Colors.red,
                           ),
                         ),
-                        trailing: const Icon(Icons.chevron_right),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            EmployeeDeleteButton(
+                              employee: emp,
+                              onDeleted: () =>
+                                  ref.invalidate(employeeListProvider),
+                            ),
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
                         onTap: () {
                           context.go('/admin/employees/${emp.id}');
                         },

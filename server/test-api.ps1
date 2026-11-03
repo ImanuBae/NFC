@@ -380,6 +380,22 @@ try {
     Check (@(Api GET '/employees' $null $adminToken | Where-Object code -eq 'NFC04').Count -eq 0) 'UID conflict rolls back the entire employee batch'
     $null=Api PUT '/cards/0400AA01' @{active=$false} $adminToken
     Check (-not (Api POST '/employees/import/preview' $nfcUpload $adminToken).can_import) 'Excel cannot reactivate a revoked card'
+    Rejected { Api DELETE "/employees/$($nfcOne.id)" $null $newLogin.token } 403
+    Rejected { Api DELETE "/employees/$($nfcOne.id)" $null $kioskToken } 403
+    $nfcAccount = $nfcResult.credentials | Where-Object code -eq 'NFC01'
+    $nfcLogin = Api POST '/auth/login' @{email=$nfcAccount.email;password='12345678'}
+    $null = Api DELETE "/employees/$($nfcOne.id)" $null $adminToken
+    Check (@(Api GET '/employees?query=NFC01' $null $adminToken).Count -eq 0) 'Deleted employee is removed'
+    Check (@(Api GET "/cards?employeeId=$($nfcOne.id)" $null $adminToken).Count -eq 0) 'Deletion releases the employee NFC cards'
+    Rejected { Api GET '/auth/me' $null $nfcLogin.token } 401
+    Rejected { Api DELETE "/employees/$($nfcOne.id)" $null $adminToken } 404
+    Check (@((Api GET "/employees/import/$($nfcResult.import_id)/emails" $null $adminToken).rows | Where-Object recipient -eq $nfcAccount.email).Count -eq 0) 'Deletion removes the employee onboarding mail'
+    $receipt = Api POST '/employees/import/commit' $nfcUpload $adminToken
+    Check (@($receipt.credentials | Where-Object code -eq 'NFC01').Count -eq 0) 'Shared receipt no longer exposes deleted credentials'
+    Check (@(Api GET '/employees?query=NFC01' $null $adminToken).Count -eq 0) 'Retrying the old receipt does not recreate deleted accounts'
+    Check (@(Api GET '/employees?query=NFC02' $null $adminToken).Count -eq 1) 'Deleting one employee preserves other imported employees'
+    $reimport = Api POST '/employees/import/preview' $nfcUpload $adminToken
+    Check ($reimport.can_import -and $reimport.create_count -eq 1) 'Deleted code email and UID can be imported again in a new batch'
     Write-Output "$script:checks API checks passed against isolated SQL Server database."
 } catch {
     Write-Output "Test stopped after $script:checks checks at $script:lastRequest"

@@ -7,6 +7,8 @@ import '../../../core/strings.dart';
 import '../cards/card_model.dart';
 import '../cards/card_repository.dart';
 import 'employee_form_dialog.dart';
+import 'employee_delete_button.dart';
+import 'employee_list_page.dart';
 import 'employee_model.dart';
 import 'employee_repository.dart';
 
@@ -37,6 +39,15 @@ class EmployeeDetailPage extends ConsumerWidget {
       appBar: AppBar(
         title: const Text(S.employeeDetail),
         actions: [
+          if (empAsync.value != null)
+            EmployeeDeleteButton(
+              employee: empAsync.value!,
+              onDeleted: () {
+                ref.invalidate(employeeDetailProvider(employeeId));
+                ref.invalidate(employeeListProvider);
+                context.go('/admin/employees');
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.edit),
             tooltip: S.editEmployee,

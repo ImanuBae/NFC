@@ -55,6 +55,12 @@ public static class Endpoints
         app.MapGet("/api/employees/{id:guid}", async (Guid id, HttpContext c, AttendanceDb db) => { Own(c, id); return await db.Employees.AsNoTracking().SingleOrDefaultAsync(e => e.Id == id); });
         app.MapPost("/api/employees", (JsonElement b, HttpContext c, AttendanceDb db) => SaveEmployee(null, b, c, db));
         app.MapPut("/api/employees/{id:guid}", (Guid id, JsonElement b, HttpContext c, AttendanceDb db) => SaveEmployee(id, b, c, db));
+        app.MapDelete("/api/employees/{id:guid}", async (Guid id, HttpContext c, AttendanceDb db, Microsoft.AspNetCore.DataProtection.IDataProtectionProvider protection) =>
+        {
+            Admin(c);
+            await EmployeeDeletion.Delete(id, Actor(c).Id, db, protection);
+            return new { status = "deleted" };
+        });
         app.MapGet("/api/cards", async (HttpContext c, AttendanceDb db, Guid? employeeId, string? uid) =>
         {
             var a = Actor(c); var q = db.Cards.AsNoTracking().AsQueryable(); if (!Staff(a)) q = q.Where(x => x.EmployeeId == a.EmployeeId); if (employeeId != null) q = q.Where(x => x.EmployeeId == employeeId); if (uid != null) q = q.Where(x => x.Uid == uid.ToUpper()); return await q.OrderByDescending(x => x.CreatedAt).ToListAsync();

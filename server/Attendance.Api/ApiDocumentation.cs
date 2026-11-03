@@ -46,6 +46,7 @@ public sealed class AttendanceOperationFilter : IOperationFilter
         ["GET /api/employees/{id}"] = new("Nhân viên", "Chi tiết nhân viên", "admin/manager hoặc chính nhân viên"),
         ["POST /api/employees"] = new("Nhân viên", "Tạo nhân viên", "admin"),
         ["PUT /api/employees/{id}"] = new("Nhân viên", "Cập nhật nhân viên", "admin; ngừng hoạt động sẽ khóa thẻ và thu hồi mẫu mặt"),
+        ["DELETE /api/employees/{id}"] = new("Nhân viên", "Xóa nhân viên và dữ liệu liên quan", "admin; xóa vĩnh viễn tài khoản nhân viên/quản lý, thẻ, mẫu mặt, lịch sử công và chi tiết lương"),
         ["GET /api/cards"] = new("Thẻ NFC", "Danh sách thẻ theo nhân viên hoặc UID", "admin/manager xem danh sách; tài khoản khác chỉ xem thẻ của mình"),
         ["POST /api/cards"] = new("Thẻ NFC", "Gán UID thẻ cho nhân viên", "admin; UID phải là chuỗi hex duy nhất"),
         ["PUT /api/cards/{uid}"] = new("Thẻ NFC", "Khóa hoặc kích hoạt thẻ", "admin"),
