@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../../../core/strings.dart';
 import 'employee_model.dart';
 import 'employee_repository.dart';
+import 'employee_delete_button.dart';
+
+enum EmployeeFormResult { saved, deleted }
 
 class EmployeeFormDialog extends StatefulWidget {
   final Employee? employee;
@@ -14,12 +17,12 @@ class EmployeeFormDialog extends StatefulWidget {
     required this.repository,
   });
 
-  static Future<bool?> show(
+  static Future<EmployeeFormResult?> show(
     BuildContext context, {
     Employee? employee,
     required EmployeeRepository repository,
   }) {
-    return showDialog<bool>(
+    return showDialog<EmployeeFormResult>(
       context: context,
       builder: (ctx) =>
           EmployeeFormDialog(employee: employee, repository: repository),
@@ -85,7 +88,7 @@ class _EmployeeFormDialogState extends State<EmployeeFormDialog> {
           hourlyRate: double.parse(_rateController.text.trim()),
         );
       }
-      if (mounted) Navigator.of(context).pop(true);
+      if (mounted) Navigator.of(context).pop(EmployeeFormResult.saved);
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -93,6 +96,25 @@ class _EmployeeFormDialogState extends State<EmployeeFormDialog> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  Future<void> _delete() async {
+    final employee = widget.employee;
+    if (employee == null || _isLoading) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final confirmed = await confirmEmployeeDeletion(context, employee);
+      if (!confirmed || !mounted) return;
+      await widget.repository.deleteEmployee(employee.id);
+      if (mounted) Navigator.of(context).pop(EmployeeFormResult.deleted);
+    } catch (error) {
+      if (mounted) setState(() => _error = 'Không xóa được nhân viên: $error');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -157,8 +179,17 @@ class _EmployeeFormDialogState extends State<EmployeeFormDialog> {
         ),
       ),
       actions: [
+        if (isEditing)
+          TextButton.icon(
+            onPressed: _isLoading ? null : _delete,
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Xóa nhân viên'),
+          ),
         TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
           child: const Text(S.cancel),
         ),
         FilledButton(

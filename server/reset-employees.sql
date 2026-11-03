@@ -32,6 +32,8 @@ BEGIN TRY
     INSERT @Counts VALUES ('Cards', @@ROWCOUNT);
     DELETE dbo.Events WHERE EmployeeId IN (SELECT Id FROM #EmployeeIds);
     INSERT @Counts VALUES ('Events', @@ROWCOUNT);
+    IF OBJECT_ID('dbo.AttendanceTickets', 'U') IS NOT NULL
+        DELETE dbo.AttendanceTickets WHERE EmployeeId IN (SELECT Id FROM #EmployeeIds);
     DELETE dbo.EmailJobs WHERE EmployeeId IN (SELECT Id FROM #EmployeeIds);
     DELETE dbo.PayrollItems WHERE EmployeeId IN (SELECT Id FROM #EmployeeIds);
     DELETE dbo.PayrollRuns WHERE NOT EXISTS (SELECT 1 FROM dbo.PayrollItems i WHERE i.RunId = PayrollRuns.Id);

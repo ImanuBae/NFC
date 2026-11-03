@@ -113,6 +113,17 @@ public static class Endpoints
             return await q.OrderBy(i => i.EmployeeCode).Join(db.PayrollRuns, i => i.RunId, r => r.Id, (i, r) => new { i.RunId, i.EmployeeId, i.EmployeeCode, i.EmployeeName, i.WorkedMinutes, i.HourlyRate, i.GrossPay, payroll_runs = new { r.StartDate, r.EndDate } }).ToListAsync();
         });
         app.MapPost("/api/payroll/close", ClosePayroll);
+        app.MapGet("/api/payroll/runs/{id:guid}/export", async (Guid id, HttpContext c, AttendanceDb db) =>
+        {
+            StaffOnly(c);
+            c.Response.Headers.CacheControl = "no-store";
+            var run = await db.PayrollRuns.AsNoTracking().SingleOrDefaultAsync(r => r.Id == id);
+            Require(run != null, "Không tìm thấy kỳ lương đã chốt.", 404);
+            var items = await db.PayrollItems.AsNoTracking().Where(i => i.RunId == id).ToListAsync();
+            Require(items.Count > 0, "Kỳ này không còn chi tiết lương để xuất.", 409);
+            return new { file_name = $"bang_luong_da_chot_{run!.StartDate:yyyyMMdd}_{run.EndDate.AddDays(-1):yyyyMMdd}.xlsx",
+                content_base64 = Convert.ToBase64String(PayrollSpreadsheet.Write(run, items)) };
+        });
         app.MapPost("/api/business", (JsonElement b, HttpContext c, AttendanceDb db, IHttpClientFactory clients) => Action(b, c, db, clients, app.Configuration));
     }
     static async Task<Employee> SaveEmployee(Guid? id, JsonElement b, HttpContext c, AttendanceDb db)

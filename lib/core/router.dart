@@ -16,6 +16,7 @@ import '../features/auth/login_page.dart';
 import '../features/business/accounts_page.dart';
 import '../features/business/reports_page.dart';
 import '../features/business/employee_home_page.dart';
+import '../features/business/attendance_tickets_page.dart';
 import '../features/kiosk/device_config.dart';
 import '../features/kiosk/kiosk_idle_page.dart';
 import '../features/kiosk/kiosk_setup_page.dart';
@@ -156,6 +157,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       ShellRoute(
         builder: (context, state, child) => AdminShell(child: child),
         routes: [
+          GoRoute(
+            path: '/admin/tickets',
+            builder: (context, state) =>
+                const AttendanceTicketsPage(reviewMode: true),
+          ),
           GoRoute(
             path: '/admin/reports',
             builder: (context, state) => const ReportsPage(),

@@ -175,7 +175,7 @@ class EmployeeListPage extends ConsumerWidget {
             context,
             repository: repo,
           );
-          if (created == true) {
+          if (created == EmployeeFormResult.saved) {
             ref.invalidate(employeeListProvider);
           }
         },

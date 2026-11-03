@@ -60,8 +60,18 @@ class EmployeeDetailPage extends ConsumerWidget {
                 employee: emp,
                 repository: repo,
               );
-              if (updated == true) {
+              if (!context.mounted) return;
+              if (updated == EmployeeFormResult.deleted) {
                 ref.invalidate(employeeDetailProvider(employeeId));
+                ref.invalidate(employeeCardsProvider(employeeId));
+                ref.invalidate(employeeListProvider);
+                context.go('/admin/employees');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Đã xóa nhân viên.')),
+                );
+              } else if (updated == EmployeeFormResult.saved) {
+                ref.invalidate(employeeDetailProvider(employeeId));
+                ref.invalidate(employeeListProvider);
               }
             },
           ),

@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 
 import 'business_repository.dart';
 import 'report_period.dart';
+import 'payroll_export_button.dart';
 
 class ReportsPage extends ConsumerStatefulWidget {
   const ReportsPage({super.key});
@@ -15,6 +16,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
   ReportPeriod _period = ReportPeriod.month;
   DateTime _date = DateTime.now();
   late Future<List<Map<String, dynamic>>> _report;
+  late Future<List<Map<String, dynamic>>> _runs;
   bool _busy = false;
   final _money = NumberFormat.currency(
     locale: 'vi_VN',
@@ -34,6 +36,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
     _report = ref
         .read(businessRepositoryProvider)
         .report(range.startDate, range.endDate);
+    _runs = ref.read(businessRepositoryProvider).payrollRuns();
   }
 
   void _message(String text) {
@@ -115,6 +118,11 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       await ref
           .read(businessRepositoryProvider)
           .closePayroll(range.startDate, _period.name);
+      if (mounted) {
+        setState(
+          () => _runs = ref.read(businessRepositoryProvider).payrollRuns(),
+        );
+      }
       _message('Đã lưu bảng lương kỳ ${range.label}.');
     } catch (e) {
       _message('$e');
@@ -129,6 +137,7 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
       final repo = ref.read(businessRepositoryProvider);
       final runs = await repo.payrollRuns();
       if (!mounted) return;
+      setState(() => _busy = false);
       await showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
@@ -142,6 +151,10 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                     children: runs
                         .map(
                           (run) => ListTile(
+                            trailing: PayrollExportButton(
+                              runId: run['id'] as String,
+                              iconOnly: true,
+                            ),
                             title: Text(
                               '${run['start_date']} → ${run['end_date']} (không gồm ngày cuối)',
                             ),
@@ -188,6 +201,9 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                                       ),
                                     ),
                                     actions: [
+                                      PayrollExportButton(
+                                        runId: run['id'] as String,
+                                      ),
                                       TextButton(
                                         onPressed: () => Navigator.pop(ctx),
                                         child: const Text('Đóng'),
@@ -295,12 +311,50 @@ class _ReportsPageState extends ConsumerState<ReportsPage> {
                         }
                       },
               ),
-              if (_period == ReportPeriod.week || _period == ReportPeriod.month)
-                FilledButton.icon(
-                  onPressed: _busy ? null : _closePayroll,
-                  icon: const Icon(Icons.lock),
-                  label: const Text('Chốt lương'),
-                ),
+              FutureBuilder<List<Map<String, dynamic>>>(
+                future: _runs,
+                builder: (context, snapshot) {
+                  Map<String, dynamic>? closed;
+                  for (final run in snapshot.data ?? []) {
+                    if (run['start_date'] == _range.startDate &&
+                        run['end_date'] == _range.endDate) {
+                      closed = run;
+                      break;
+                    }
+                  }
+                  if (closed != null) {
+                    return Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        const Chip(
+                          avatar: Icon(Icons.lock_outline, size: 18),
+                          label: Text('Đã chốt'),
+                        ),
+                        PayrollExportButton(
+                          runId: closed['id'] as String,
+                          disabled: _busy,
+                        ),
+                      ],
+                    );
+                  }
+                  if (_period != ReportPeriod.week &&
+                      _period != ReportPeriod.month) {
+                    return const SizedBox.shrink();
+                  }
+                  return FilledButton.icon(
+                    onPressed:
+                        _busy ||
+                            snapshot.connectionState != ConnectionState.done ||
+                            snapshot.hasError
+                        ? null
+                        : _closePayroll,
+                    icon: const Icon(Icons.lock),
+                    label: const Text('Chốt lương'),
+                  );
+                },
+              ),
             ],
           ),
         ),

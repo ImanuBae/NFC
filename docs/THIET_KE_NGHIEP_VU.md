@@ -138,7 +138,8 @@ hay các loại báo cáo riêng theo phương thức xác thực.
   lượt và chặn chốt lương đến khi được xử lý.
 
 Dashboard nhân viên đủ bốn mục và quy trình ticket tại mục 2–3 vẫn là yêu cầu đích,
-chưa hoàn thiện trong đợt sửa dashboard quản lý này.
+chưa hoàn thiện trong đợt sửa dashboard quản lý này. Luồng tạo, hủy, duyệt/từ chối
+ticket đã được bổ sung ngày 03/11/2026; xem [hướng dẫn ticket](TICKET_SUA_CONG.md).
 
 ## 9. Nhập danh sách nhân viên đã triển khai (30/10/2026)
 

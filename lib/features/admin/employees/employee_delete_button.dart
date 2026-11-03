@@ -4,26 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'employee_model.dart';
 import 'employee_repository.dart';
 
-class EmployeeDeleteButton extends ConsumerStatefulWidget {
-  const EmployeeDeleteButton({
-    super.key,
-    required this.employee,
-    required this.onDeleted,
-  });
-  final Employee employee;
-  final VoidCallback onDeleted;
-
-  @override
-  ConsumerState<EmployeeDeleteButton> createState() =>
-      _EmployeeDeleteButtonState();
-}
-
-class _EmployeeDeleteButtonState extends ConsumerState<EmployeeDeleteButton> {
-  bool _busy = false;
-
-  Future<void> _delete() async {
-    final employee = widget.employee;
-    final confirmed = await showDialog<bool>(
+Future<bool> confirmEmployeeDeletion(
+  BuildContext context,
+  Employee employee,
+) async =>
+    await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Xóa nhân viên?'),
@@ -46,7 +31,29 @@ class _EmployeeDeleteButtonState extends ConsumerState<EmployeeDeleteButton> {
           ),
         ],
       ),
-    );
+    ) ??
+    false;
+
+class EmployeeDeleteButton extends ConsumerStatefulWidget {
+  const EmployeeDeleteButton({
+    super.key,
+    required this.employee,
+    required this.onDeleted,
+  });
+  final Employee employee;
+  final VoidCallback onDeleted;
+
+  @override
+  ConsumerState<EmployeeDeleteButton> createState() =>
+      _EmployeeDeleteButtonState();
+}
+
+class _EmployeeDeleteButtonState extends ConsumerState<EmployeeDeleteButton> {
+  bool _busy = false;
+
+  Future<void> _delete() async {
+    final employee = widget.employee;
+    final confirmed = await confirmEmployeeDeletion(context, employee);
     if (confirmed != true || !mounted) return;
     setState(() => _busy = true);
     try {

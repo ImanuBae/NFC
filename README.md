@@ -1,5 +1,8 @@
 # NFC Attendance — Flutter + ASP.NET Core + SQL Server
 
+Admin/Quản lý có thể [xuất Excel bảng lương đã chốt](docs/XUAT_LUONG_EXCEL.md)
+ngay trong **Báo cáo & lương** hoặc danh sách **Lương đã chốt**.
+
 Ứng dụng dùng **SQL Server**, quản lý database bằng **SSMS**. Flutter gọi ASP.NET Core
 REST API; không kết nối SQL trực tiếp, không cần Firebase hoặc dịch vụ database cloud.
 Hai phương thức chấm công là **NFC và khuôn mặt bằng camera**. Vân tay đã được bỏ.
@@ -7,6 +10,10 @@ Hai phương thức chấm công là **NFC và khuôn mặt bằng camera**. Vâ
 Swagger: **http://localhost:5080/swagger/index.html**. Có đầy đủ endpoint,
 request mẫu và Authorize bằng session token. Xem [hướng dẫn test API](docs/SWAGGER.md)
 để mở từ điện thoại/máy ảo và test theo từng vai trò.
+
+Nhân viên có thể tạo và theo dõi ticket sửa công từ **Lịch sử chấm công**;
+Admin/Quản lý duyệt hoặc từ chối từ biểu tượng ticket trên dashboard.
+Xem [hướng dẫn ticket sửa công](docs/TICKET_SUA_CONG.md).
 
 Thiết kế nghiệp vụ đã thống nhất: [Ba giao diện, ticket sửa công và bảng công chung](docs/THIET_KE_NGHIEP_VU.md).
 

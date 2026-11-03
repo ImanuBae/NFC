@@ -36,6 +36,7 @@ public static class EmployeeDeletion
         await db.Faces.Where(f => f.EmployeeId == id || accounts.Contains(f.UserId)).ExecuteDeleteAsync();
         await db.Cards.Where(c => c.EmployeeId == id).ExecuteDeleteAsync();
         await db.Events.Where(e => e.EmployeeId == id).ExecuteDeleteAsync();
+        await db.AttendanceTickets.Where(t => t.EmployeeId == id).ExecuteDeleteAsync();
         await db.EmailJobs.Where(j => j.EmployeeId == id).ExecuteDeleteAsync();
         await db.PayrollItems.Where(i => i.EmployeeId == id).ExecuteDeleteAsync();
         // Keep devices and privileged accounts usable after removing their employee association.

@@ -8,6 +8,8 @@ import '../admin/employees/employee_detail_page.dart';
 
 import '../admin/employees/employee_model.dart';
 import '../auth/auth_repository.dart';
+import '../business/attendance_ticket_form.dart';
+import '../business/attendance_tickets_page.dart';
 
 final myAttendanceEventsProvider = FutureProvider.family
     .autoDispose<List<AttendanceEventItem>, String>((ref, employeeId) async {
@@ -59,6 +61,38 @@ class _MyHistoryPageState extends ConsumerState<MyHistoryPage> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                onPressed: () async {
+                  final sent = await AttendanceTicketForm.show(context);
+                  if (sent == true && mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Đã gửi ticket, đang chờ Admin/Quản lý xử lý.',
+                        ),
+                      ),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.add_comment_outlined),
+                label: const Text('Tạo ticket sửa công'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const AttendanceTicketsPage(),
+                  ),
+                ),
+                icon: const Icon(Icons.confirmation_number_outlined),
+                label: const Text('Ticket của tôi'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
           empAsync.when(
             loading: () => const SizedBox.shrink(),
             error: (_, _) => const SizedBox.shrink(),
@@ -238,7 +272,18 @@ class _MyHistoryPageState extends ConsumerState<MyHistoryPage> {
                                     : Colors.blue[800]),
                         ),
                       ),
-                      subtitle: Text('$timeStr • $dateStr'),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('$timeStr • $dateStr'),
+                          if (!ev.isVoided)
+                            TextButton(
+                              onPressed: () =>
+                                  AttendanceTicketForm.show(context, event: ev),
+                              child: const Text('Yêu cầu sửa giờ'),
+                            ),
+                        ],
+                      ),
                       trailing: Wrap(
                         spacing: 6,
                         crossAxisAlignment: WrapCrossAlignment.center,

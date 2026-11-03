@@ -58,6 +58,34 @@ using (var scope = app.Services.CreateScope())
             CREATE INDEX [IX_OnboardingEmails_ImportId] ON [OnboardingEmails] ([ImportId]);
         END;
         IF COL_LENGTH('OnboardingEmails', 'Transport') IS NULL ALTER TABLE [OnboardingEmails] ADD [Transport] nvarchar(20) NULL;
+        IF OBJECT_ID('AttendanceTickets', 'U') IS NULL
+        BEGIN
+            CREATE TABLE [AttendanceTickets] (
+                [Id] uniqueidentifier NOT NULL PRIMARY KEY, [EmployeeId] uniqueidentifier NOT NULL,
+                [CreatedBy] uniqueidentifier NOT NULL, [Kind] nvarchar(30) NOT NULL,
+                [OriginalEventId] uniqueidentifier NULL, [OriginalOccurredAt] datetimeoffset NULL,
+                [EventType] nvarchar(20) NOT NULL, [ProposedAt] datetimeoffset NOT NULL,
+                [Reason] nvarchar(1000) NOT NULL, [Status] nvarchar(20) NOT NULL,
+                [Response] nvarchar(1000) NULL, [ReviewedBy] uniqueidentifier NULL,
+                [AppliedEventId] uniqueidentifier NULL, [CreatedAt] datetimeoffset NOT NULL,
+                [ReviewedAt] datetimeoffset NULL
+            );
+            CREATE INDEX [IX_AttendanceTickets_EmployeeId_CreatedAt] ON [AttendanceTickets] ([EmployeeId], [CreatedAt]);
+        END;
+        IF OBJECT_ID('TicketEvidence', 'U') IS NULL
+        BEGIN
+            CREATE TABLE [TicketEvidence] (
+                [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+                [TicketId] uniqueidentifier NOT NULL,
+                [FileName] nvarchar(200) NOT NULL,
+                [ContentType] nvarchar(50) NOT NULL,
+                [Content] varbinary(max) NOT NULL,
+                [SizeBytes] int NOT NULL,
+                CONSTRAINT [FK_TicketEvidence_AttendanceTickets_TicketId]
+                    FOREIGN KEY ([TicketId]) REFERENCES [AttendanceTickets] ([Id]) ON DELETE CASCADE
+            );
+            CREATE INDEX [IX_TicketEvidence_TicketId] ON [TicketEvidence] ([TicketId]);
+        END;
         """);
     // Activate legacy pending enrollments; keep revoked/inactive identities excluded.
     await db.Faces.Where(f => !f.Approved && !f.Revoked && f.Model == "sface-2021dec-v1"
@@ -98,4 +126,5 @@ app.Use(async (ctx, next) =>
 });
 Endpoints.Register(app);
 EmployeeImport.Register(app);
+AttendanceTickets.Register(app);
 app.Run();

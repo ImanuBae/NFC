@@ -66,3 +66,5 @@ Check(Business.Sessions([In(5), Out(23)]).Single().End == null, "Do not pair an 
 Console.WriteLine($"Passed {checks} attendance business checks.");
 Console.WriteLine($"Passed {EmployeeSpreadsheetChecks.Run()} Excel import checks.");
 Console.WriteLine($"Passed {EmailSettingsChecks.Run()} email settings checks.");
+Console.WriteLine($"Passed {TicketEvidenceChecks.Run()} ticket evidence checks.");
+Console.WriteLine($"Passed {PayrollSpreadsheetChecks.Run()} payroll spreadsheet checks.");

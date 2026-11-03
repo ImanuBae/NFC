@@ -104,7 +104,7 @@ try {
             }
         }
     }
-    $routeSources=(Get-Content -Raw (Join-Path $apiRoot 'Endpoints.cs')) + (Get-Content -Raw (Join-Path $apiRoot 'EmployeeImport.cs'))
+    $routeSources=(Get-Content -Raw (Join-Path $apiRoot 'Endpoints.cs')) + (Get-Content -Raw (Join-Path $apiRoot 'EmployeeImport.cs')) + (Get-Content -Raw (Join-Path $apiRoot 'AttendanceTickets.cs'))
     $routes=[regex]::Matches($routeSources,'app\.Map(Get|Post|Put|Delete|Patch)\("([^"]+)"')
     Check ($routes.Count -eq $documented.Count) 'Swagger covers every registered API operation'
     foreach ($route in $routes) {
@@ -235,7 +235,24 @@ try {
     Check ($ownDays.Count -eq 1 -and $ownDays[0].employee_id -eq $other.id) 'Employee summary is restricted to own attendance'
     Rejected { Api GET '/attendance/days?date=2025-04-02' $null $kioskToken } 403
     Check (@(Api GET "/attendance/events?employeeId=$($other.id)&date=2025-04-02" $null $adminToken).Count -eq 4) 'Calculation preserves all original attendance events'
-    $null=Api POST '/payroll/close' @{start='2025-01-01';period='month'} $adminToken
+    $closedPayroll=Api POST '/payroll/close' @{start='2025-01-01';period='month'} $adminToken
+    $payrollExportPath="/payroll/runs/$($closedPayroll.id)/export"
+    $payrollFile=Api GET $payrollExportPath $null $adminToken
+    Check ($payrollFile.file_name -eq 'bang_luong_da_chot_20250101_20250131.xlsx') 'Closed payroll has an Excel download'
+    function PayrollSheet($file) {
+        Add-Type -AssemblyName System.IO.Compression
+        $memory=[IO.MemoryStream]::new([Convert]::FromBase64String($file.content_base64))
+        $archive=[IO.Compression.ZipArchive]::new($memory)
+        $reader=[IO.StreamReader]::new($archive.GetEntry('xl/worksheets/sheet1.xml').Open())
+        try { $reader.ReadToEnd() } finally { $reader.Dispose(); $archive.Dispose(); $memory.Dispose() }
+    }
+    $savedSheet=PayrollSheet $payrollFile
+    $null=Api PUT "/employees/$($other.id)" @{code='E2';full_name='Renamed after closing';active=$true;hourly_rate=77777} $adminToken
+    Check ((PayrollSheet (Api GET $payrollExportPath $null $adminToken)) -eq $savedSheet) 'Excel exports the frozen payroll even after profile and rate change'
+    $null=Api PUT "/employees/$($other.id)" @{code='E2';full_name='Other employee';active=$true;hourly_rate=30000} $adminToken
+    Rejected { Api GET $payrollExportPath $null $employeeToken } 403
+    Rejected { Api GET $payrollExportPath $null $kioskToken } 403
+    Rejected { Api GET '/payroll/runs/00000000-0000-0000-0000-000000000000/export' $null $adminToken } 404
     Rejected { Api POST '/attendance/manual' @{employee_id=$other.id;type='check_out';occurred_at='2025-01-31T23:30:00+07:00';reason='Closed payroll test'} $adminToken } 409
     Rejected { Api POST '/payroll/close' @{start='2025-01-27';period='week'} $adminToken } 409
     $importFixture = Join-Path $PSScriptRoot 'Attendance.Tests/Fixtures/employees-valid.xlsx'
@@ -396,6 +413,66 @@ try {
     Check (@(Api GET '/employees?query=NFC02' $null $adminToken).Count -eq 1) 'Deleting one employee preserves other imported employees'
     $reimport = Api POST '/employees/import/preview' $nfcUpload $adminToken
     Check ($reimport.can_import -and $reimport.create_count -eq 1) 'Deleted code email and UID can be imported again in a new batch'
+    Rejected { Api GET '/attendance/tickets' $null $kioskToken } 403
+    Rejected { Api POST '/attendance/tickets' @{kind='missing_in';proposed_at='2025-06-02T09:00:00+07:00';reason='Missing scan'} $kioskToken } 403
+    $ticketBody = @{kind='missing_in';proposed_at='2025-06-02T09:00:00+07:00';reason='Forgot to scan';employee_id=$other.id}
+    $ticket = Api POST '/attendance/tickets' $ticketBody $newLogin.token
+    Check ($ticket.status -eq 'pending' -and $ticket.employee_id -eq $kd01.id) 'Ticket uses authenticated employee, ignoring forged ownership'
+    Check (@(Api GET "/attendance/events?employeeId=$($kd01.id)&date=2025-06-02" $null $adminToken).Count -eq 0) 'Creating a ticket does not modify attendance'
+    Rejected { Api POST '/attendance/tickets' $ticketBody $newLogin.token } 409
+    Check (@(Api GET '/attendance/tickets' $null $otherToken).Count -eq 0) 'Other employee cannot see private tickets'
+    Rejected { Api POST "/attendance/tickets/$($ticket.id)/cancel" @{} $otherToken } 404
+    Rejected { Api POST "/attendance/tickets/$($ticket.id)/review" @{decision='approved'} $newLogin.token } 403
+    $null = Api POST "/attendance/tickets/$($ticket.id)/review" @{decision='approved';response='Verified scan omission'} $adminToken
+    $ticketEvents = @(Api GET "/attendance/events?employeeId=$($kd01.id)&date=2025-06-02" $null $adminToken)
+    Check ($ticketEvents.Count -eq 1 -and $ticketEvents[0].source -eq 'manual') 'Approval creates the requested attendance event'
+    Rejected { Api POST "/attendance/tickets/$($ticket.id)/review" @{decision='approved'} $adminToken } 409
+    Check (@(Api GET "/attendance/events?employeeId=$($kd01.id)&date=2025-06-02" $null $adminToken).Count -eq 1) 'Repeated approval does not duplicate attendance'
+    $correct = Api POST '/attendance/tickets' @{kind='incorrect_time';proposed_at='2025-06-02T09:30:00+07:00';reason='Clock was wrong';original_event_id=$ticketEvents[0].id} $newLogin.token
+    $null = Api POST "/attendance/tickets/$($correct.id)/review" @{decision='approved'} $adminToken
+    $correctedEvents = @(Api GET "/attendance/events?employeeId=$($kd01.id)&date=2025-06-02" $null $adminToken)
+    Check ($correctedEvents.Count -eq 2 -and @($correctedEvents | Where-Object voided_at).Count -eq 1) 'Correction retains voided original and creates a replacement'
+    Rejected { Api POST '/attendance/tickets' @{kind='incorrect_time';proposed_at='2025-06-02T09:15:00+07:00';reason='Try another employee';original_event_id=$correctedEvents[0].id} $otherToken } 400
+    Rejected { Api POST '/attendance/tickets' @{kind='missing_out';proposed_at='2099-01-01T18:00:00+07:00';reason='Future'} $newLogin.token } 400
+    Rejected { Api POST '/attendance/tickets' @{kind='missing_out';proposed_at='2025-06-02T18:00:00+07:00';reason='   '} $newLogin.token } 400
+    Rejected { Api POST '/attendance/tickets' @{kind='missing_out';proposed_at='2025-01-02T18:00:00+07:00';reason='Closed payroll'} $newLogin.token } 409
+    $cancel = Api POST '/attendance/tickets' @{kind='missing_out';proposed_at='2025-06-02T18:00:00+07:00';reason='Missing exit'} $newLogin.token
+    $null = Api POST "/attendance/tickets/$($cancel.id)/cancel" @{} $newLogin.token
+    Rejected { Api POST "/attendance/tickets/$($cancel.id)/review" @{decision='approved'} $adminToken } 409
+    $reject = Api POST '/attendance/tickets' @{kind='missing_out';proposed_at='2025-06-02T18:00:00+07:00';reason='Please verify'} $newLogin.token
+    Rejected { Api POST "/attendance/tickets/$($reject.id)/review" @{decision='rejected'} $adminToken } 400
+    $null = Api POST "/attendance/tickets/$($reject.id)/review" @{decision='rejected';response='Not supported by scan records'} $adminToken
+    $mine = @(Api GET '/attendance/tickets' $null $newLogin.token)
+    Check (@($mine | Where-Object { $_.id -eq $reject.id -and $_.status -eq 'rejected' -and $_.response }).Count -eq 1) 'Employee sees review response and rejected status'
+    $locked = Api POST '/attendance/tickets' @{kind='missing_out';proposed_at='2025-06-02T18:00:00+07:00';reason='Pending while payroll closes'} $newLogin.token
+    $null = Api POST '/attendance/manual' @{employee_id=$kd01.id;type='check_out';occurred_at='2025-06-02T17:00:00+07:00';reason='Complete shift before locking payroll'} $adminToken
+    $null = Api POST '/payroll/close' @{start='2025-06-01';period='month'} $adminToken
+    Rejected { Api POST "/attendance/tickets/$($locked.id)/review" @{decision='approved'} $adminToken } 409
+    Check (@(Api GET "/attendance/events?employeeId=$($kd01.id)&date=2025-06-02" $null $adminToken).Count -eq 3) 'Payroll lock prevents approval from changing attendance'
+    $pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='
+    $evidenceBody = @{kind='missing_in';proposed_at='2025-07-01T09:00:00+07:00';reason='Evidence for missing scan';attachments=@(@{file_name='scan.png';content_base64=$pngBase64})}
+    $withEvidence = Api POST '/attendance/tickets' $evidenceBody $newLogin.token
+    $evidenceTicket = @(Api GET '/attendance/tickets' $null $newLogin.token) | Where-Object id -eq $withEvidence.id
+    Check ($evidenceTicket.attachments.Count -eq 1 -and $evidenceTicket.attachments[0].content_type -eq 'image/png') 'Ticket lists evidence metadata'
+    Check (-not ($evidenceTicket.attachments[0].PSObject.Properties.Name -contains 'content_base64')) 'Ticket list does not load attachment contents'
+    $evidenceId = $evidenceTicket.attachments[0].id
+    $evidencePath = "/attendance/tickets/$($withEvidence.id)/attachments/$evidenceId"
+    Check ((Api GET $evidencePath $null $newLogin.token).content_base64 -eq $pngBase64) 'Owner can retrieve original evidence bytes'
+    Check ((Api GET $evidencePath $null $adminToken).content_base64 -eq $pngBase64) 'Admin can inspect evidence when reviewing'
+    Rejected { Api GET $evidencePath $null $otherToken } 404
+    Rejected { Api GET $evidencePath $null $kioskToken } 403
+    Rejected { Api GET $evidencePath } 401
+    Rejected { Api GET "/attendance/tickets/$($ticket.id)/attachments/$evidenceId" $null $adminToken } 404
+    $ticketCountBefore = @(Api GET '/attendance/tickets' $null $newLogin.token).Count
+    $evidenceBody.attachments = @(@{file_name='forged.pdf';content_base64=$pngBase64})
+    Rejected { Api POST '/attendance/tickets' $evidenceBody $newLogin.token } 400
+    Check (@(Api GET '/attendance/tickets' $null $newLogin.token).Count -eq $ticketCountBefore) 'Invalid evidence leaves no partial ticket'
+    $null = Api POST "/attendance/tickets/$($withEvidence.id)/cancel" @{} $newLogin.token
+    Check ((Api GET $evidencePath $null $adminToken).content_base64 -eq $pngBase64) 'Evidence remains available after cancellation for review history'
+    $null = Api DELETE "/employees/$($kd01.id)" $null $adminToken
+    $remainingEvidence = & $sqlcmd -S $SqlServer -E -C -d $database -h -1 -W -Q "SET NOCOUNT ON; SELECT COUNT(*) FROM TicketEvidence WHERE TicketId='$($withEvidence.id)';"
+    Check ([int](($remainingEvidence -join '').Trim()) -eq 0) 'Employee deletion also deletes ticket evidence bytes'
+    Rejected { Api GET $evidencePath $null $adminToken } 404
     Write-Output "$script:checks API checks passed against isolated SQL Server database."
 } catch {
     Write-Output "Test stopped after $script:checks checks at $script:lastRequest"

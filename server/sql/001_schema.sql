@@ -1,3 +1,24 @@
+CREATE TABLE [AttendanceTickets] (
+    [Id] uniqueidentifier NOT NULL,
+    [EmployeeId] uniqueidentifier NOT NULL,
+    [CreatedBy] uniqueidentifier NOT NULL,
+    [Kind] nvarchar(30) NOT NULL,
+    [OriginalEventId] uniqueidentifier NULL,
+    [OriginalOccurredAt] datetimeoffset NULL,
+    [EventType] nvarchar(20) NOT NULL,
+    [ProposedAt] datetimeoffset NOT NULL,
+    [Reason] nvarchar(1000) NOT NULL,
+    [Status] nvarchar(20) NOT NULL,
+    [Response] nvarchar(1000) NULL,
+    [ReviewedBy] uniqueidentifier NULL,
+    [AppliedEventId] uniqueidentifier NULL,
+    [CreatedAt] datetimeoffset NOT NULL,
+    [ReviewedAt] datetimeoffset NULL,
+    CONSTRAINT [PK_AttendanceTickets] PRIMARY KEY ([Id])
+);
+GO
+
+
 CREATE TABLE [Audits] (
     [Id] bigint NOT NULL IDENTITY,
     [Actor] uniqueidentifier NOT NULL,
@@ -111,6 +132,19 @@ CREATE TABLE [Sessions] (
 GO
 
 
+CREATE TABLE [TicketEvidence] (
+    [Id] uniqueidentifier NOT NULL,
+    [TicketId] uniqueidentifier NOT NULL,
+    [FileName] nvarchar(200) NOT NULL,
+    [ContentType] nvarchar(50) NOT NULL,
+    [Content] varbinary(max) NOT NULL,
+    [SizeBytes] int NOT NULL,
+    CONSTRAINT [PK_TicketEvidence] PRIMARY KEY ([Id]),
+    CONSTRAINT [FK_TicketEvidence_AttendanceTickets_TicketId] FOREIGN KEY ([TicketId]) REFERENCES [AttendanceTickets] ([Id]) ON DELETE CASCADE
+);
+GO
+
+
 CREATE TABLE [Accounts] (
     [Id] uniqueidentifier NOT NULL,
     [Email] nvarchar(254) NOT NULL,
@@ -207,6 +241,10 @@ CREATE UNIQUE INDEX [IX_Accounts_EmployeeId] ON [Accounts] ([EmployeeId]) WHERE 
 GO
 
 
+CREATE INDEX [IX_AttendanceTickets_EmployeeId_CreatedAt] ON [AttendanceTickets] ([EmployeeId], [CreatedAt]);
+GO
+
+
 CREATE INDEX [IX_Cards_EmployeeId] ON [Cards] ([EmployeeId]);
 GO
 
@@ -248,6 +286,10 @@ GO
 
 
 CREATE UNIQUE INDEX [IX_PayrollRuns_StartDate_EndDate] ON [PayrollRuns] ([StartDate], [EndDate]);
+GO
+
+
+CREATE INDEX [IX_TicketEvidence_TicketId] ON [TicketEvidence] ([TicketId]);
 GO
 
 

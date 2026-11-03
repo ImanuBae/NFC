@@ -23,6 +23,10 @@ class BusinessRepository {
   Future<List<Map<String, dynamic>>> employees() => client.list('/employees');
   Future<List<Map<String, dynamic>>> payrollRuns() =>
       client.list('/payroll/runs');
+  Future<Map<String, dynamic>> exportPayroll(String runId) async =>
+      Map<String, dynamic>.from(
+        await client.request('GET', '/payroll/runs/$runId/export') as Map,
+      );
   Future<List<Map<String, dynamic>>> payrollItems({
     String? runId,
     String? employeeId,

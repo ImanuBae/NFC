@@ -62,6 +62,11 @@ class AdminShell extends ConsumerWidget {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: 'Duyệt ticket sửa công',
+            onPressed: () => context.go('/admin/tickets'),
+            icon: const Icon(Icons.confirmation_number_outlined),
+          ),
           if (admin)
             if (MediaQuery.sizeOf(context).width >= 700)
               Padding(

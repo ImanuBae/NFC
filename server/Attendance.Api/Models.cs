@@ -3,6 +3,35 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Attendance.Api;
 
+public class TicketEvidence
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid TicketId { get; set; }
+    public string FileName { get; set; } = "";
+    public string ContentType { get; set; } = "";
+    public byte[] Content { get; set; } = [];
+    public int SizeBytes { get; set; }
+}
+
+public class AttendanceTicket
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid EmployeeId { get; set; }
+    public Guid CreatedBy { get; set; }
+    public string Kind { get; set; } = "missing_in";
+    public Guid? OriginalEventId { get; set; }
+    public DateTimeOffset? OriginalOccurredAt { get; set; }
+    public string EventType { get; set; } = "check_in";
+    public DateTimeOffset ProposedAt { get; set; }
+    public string Reason { get; set; } = "";
+    public string Status { get; set; } = "pending";
+    public string? Response { get; set; }
+    public Guid? ReviewedBy { get; set; }
+    public Guid? AppliedEventId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? ReviewedAt { get; set; }
+}
+
 public class Employee
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -158,6 +187,8 @@ public class OnboardingEmail
 public class AttendanceDb(DbContextOptions<AttendanceDb> options) : DbContext(options)
 {
     public DbSet<Employee> Employees => Set<Employee>();
+    public DbSet<AttendanceTicket> AttendanceTickets => Set<AttendanceTicket>();
+    public DbSet<TicketEvidence> TicketEvidence => Set<TicketEvidence>();
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<LoginSession> Sessions => Set<LoginSession>();
     public DbSet<Device> Devices => Set<Device>();
@@ -174,6 +205,15 @@ public class AttendanceDb(DbContextOptions<AttendanceDb> options) : DbContext(op
     protected override void OnModelCreating(ModelBuilder b)
     {
         b.Entity<LoginSession>().HasKey(x => x.TokenHash);
+        b.Entity<AttendanceTicket>().HasIndex(x => new { x.EmployeeId, x.CreatedAt });
+        b.Entity<TicketEvidence>().Property(x => x.FileName).HasMaxLength(200);
+        b.Entity<TicketEvidence>().Property(x => x.ContentType).HasMaxLength(50);
+        b.Entity<TicketEvidence>().HasOne<AttendanceTicket>().WithMany().HasForeignKey(x => x.TicketId).OnDelete(DeleteBehavior.Cascade);
+        b.Entity<AttendanceTicket>().Property(x => x.Kind).HasMaxLength(30);
+        b.Entity<AttendanceTicket>().Property(x => x.EventType).HasMaxLength(20);
+        b.Entity<AttendanceTicket>().Property(x => x.Status).HasMaxLength(20);
+        b.Entity<AttendanceTicket>().Property(x => x.Reason).HasMaxLength(1000);
+        b.Entity<AttendanceTicket>().Property(x => x.Response).HasMaxLength(1000);
         b.Entity<Card>().HasKey(x => x.Uid);
         b.Entity<PayrollItem>().HasKey(x => new { x.RunId, x.EmployeeId });
         b.Entity<Employee>().HasIndex(x => x.Code).IsUnique();
