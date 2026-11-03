@@ -104,7 +104,9 @@ try {
             }
         }
     }
-    $routeSources=(Get-Content -Raw (Join-Path $apiRoot 'Endpoints.cs')) + (Get-Content -Raw (Join-Path $apiRoot 'EmployeeImport.cs')) + (Get-Content -Raw (Join-Path $apiRoot 'AttendanceTickets.cs'))
+    $routeSources=(Get-ChildItem $apiRoot -Filter '*.cs' -Recurse -File |
+        Where-Object FullName -NotMatch '[\\/](bin|obj)[\\/]' |
+        ForEach-Object { Get-Content -Raw -LiteralPath $_.FullName }) -join "`n"
     $routes=[regex]::Matches($routeSources,'app\.Map(Get|Post|Put|Delete|Patch)\("([^"]+)"')
     Check ($routes.Count -eq $documented.Count) 'Swagger covers every registered API operation'
     foreach ($route in $routes) {
@@ -118,7 +120,61 @@ try {
     Check ($swagger.components.securitySchemes.Bearer.type -eq 'http' -and $swagger.components.securitySchemes.Bearer.scheme -eq 'bearer') 'Authorize sends HTTP Bearer session tokens'
     Check ($documented['POST /api/auth/login'].security.Count -eq 0) 'Login does not require an existing token'
     $businessDoc=$documented['POST /api/business'].requestBody.content.'application/json'
-    Check (@($businessDoc.examples.PSObject.Properties).Count -eq 8 -and $businessDoc.schema.oneOf.Count -eq 8) 'Swagger exposes all business actions and camera purpose examples'
+    Check (@($businessDoc.examples.PSObject.Properties).Count -eq 9 -and $businessDoc.schema.oneOf.Count -eq 9) 'Swagger exposes all business actions and four camera purposes'
+    $actionNames=@($businessDoc.examples.PSObject.Properties | ForEach-Object { $_.Value.value.action } | Sort-Object -Unique)
+    $backendActions=@([regex]::Matches($routeSources,'action\s*(?:==|is|or)\s*"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
+    $backendActions+=@([regex]::Matches($routeSources,'action\s+is\s+"[^"]+"\s+or\s+"([^"]+)"') | ForEach-Object { $_.Groups[1].Value })
+    foreach($backendAction in @($backendActions | Sort-Object -Unique)) {
+        Check ($actionNames -contains $backendAction) "Swagger documents business action $backendAction"
+    }
+    foreach($purpose in @('enroll','reenroll','check_in','check_out')) {
+        Check (@($businessDoc.examples.PSObject.Properties | Where-Object { $_.Value.value.purpose -eq $purpose }).Count -eq 1) "Swagger camera example covers $purpose"
+    }
+    # Compare every literal API request used by Flutter with a registered route.
+    $canonicalRoutes=@{}
+    foreach($routeKey in $documented.Keys) { $canonicalRoutes[[regex]::Replace($routeKey,'\{[^}]+\}','{}')]=$true }
+    $dartSources=(Get-ChildItem (Join-Path $workspace 'lib') -Filter '*.dart' -Recurse -File |
+        ForEach-Object { Get-Content -Raw -LiteralPath $_.FullName }) -join "`n"
+    $appRequests=@([regex]::Matches($dartSources,'\brequest\(\s*''(GET|POST|PUT|DELETE|PATCH)''\s*,\s*''([^'']+)''') |
+        ForEach-Object { $_.Groups[1].Value+' '+$_.Groups[2].Value })
+    $appRequests+=@([regex]::Matches($dartSources,'\blist\(\s*''([^'']+)''') | ForEach-Object { 'GET '+$_.Groups[1].Value })
+    foreach($appRequest in @($appRequests | Sort-Object -Unique)) {
+        $appKey=[regex]::Replace($appRequest,'\$\{[^}]+\}|\$[A-Za-z_]\w*','{}') -replace ' /',' /api/'
+        Check ($canonicalRoutes.ContainsKey($appKey)) "Swagger covers Flutter request $appRequest"
+    }
+    foreach($actionCall in [regex]::Matches($dartSources,'\.action\(\s*''([^'']+)''')) {
+        Check ($actionNames -contains $actionCall.Groups[1].Value) "Swagger covers Flutter business action $($actionCall.Groups[1].Value)"
+    }
+    foreach($operationKey in $documented.Keys) {
+        $requestBody=$documented[$operationKey].requestBody
+        if($requestBody) {
+            Check (@($requestBody.content.'application/json'.examples.PSObject.Properties).Count -gt 0) "Swagger gives request examples for $operationKey"
+        }
+    }
+    foreach($schemaProperty in $swagger.components.schemas.PSObject.Properties) {
+        foreach($wireProperty in $schemaProperty.Value.properties.PSObject.Properties) {
+            Check ($wireProperty.Name -cnotmatch '[A-Z]') "Swagger uses snake_case for $($schemaProperty.Name).$($wireProperty.Name)"
+        }
+    }
+    $ticketDoc=$documented['POST /api/attendance/tickets'].requestBody.content.'application/json'
+    Check (@($ticketDoc.examples.PSObject.Properties).Count -eq 3 -and $ticketDoc.schema.oneOf.Count -eq 3) 'Swagger provides all three ticket kinds'
+    foreach($ticketSchema in $ticketDoc.schema.oneOf) {
+        Check ($ticketSchema.required -contains 'kind' -and $ticketSchema.required -contains 'reason') 'Ticket schema requires kind and reason'
+        Check ($ticketSchema.properties.proposed_at.format -eq 'date-time') 'Ticket proposed time uses the real snake_case field'
+        Check ($ticketSchema.properties.attachments.maxItems -eq 3 -and -not $ticketSchema.properties.attachments.minItems) 'Evidence array is optional and limited to three, not 128 face vectors'
+        Check ($ticketSchema.properties.attachments.items.required -contains 'file_name' -and $ticketSchema.properties.attachments.items.properties.content_base64.format -eq 'byte') 'Evidence request documents filename and base64'
+    }
+    $reviews=$documented['POST /api/attendance/tickets/{id}/review'].requestBody.content.'application/json'
+    Check ($reviews.examples.reject.value.decision -eq 'rejected' -and $reviews.schema.oneOf[1].required -contains 'response') 'Reject example requires review response'
+    $cameraSchema=$businessDoc.schema.oneOf | Where-Object { $_.properties.action.enum -contains 'finish_face_camera' }
+    Check ($cameraSchema.properties.first.minItems -eq 128 -and $cameraSchema.properties.last.maxItems -eq 128) 'Face vectors retain their exact 128 item contract'
+    foreach($downloadKey in @('GET /api/payroll/runs/{id}/export','GET /api/employees/import/template','GET /api/employees/import/{id}/credentials','GET /api/attendance/tickets/{id}/attachments/{fileId}')) {
+        $downloadSchema=$documented[$downloadKey].responses.'200'.content.'application/json'.schema
+        Check ($downloadSchema.properties.content_base64.format -eq 'byte' -and $downloadSchema.properties.file_name) "Swagger describes JSON file download $downloadKey"
+        Check ($documented[$downloadKey].responses.'404') "Swagger describes missing file or period for $downloadKey"
+    }
+    Check (@($documented['POST /api/scans'].responses.'200'.content.'application/json'.examples.PSObject.Properties).Count -eq 4) 'NFC documents recorded ignored duplicate and rejected responses'
+    Check ($documented['POST /api/business'].responses.'200'.content.'application/json'.examples.saved_account.value.PSObject.Properties.Name -eq 'id') 'Account save response matches actual ID-only payload'
     Check ($documented['POST /api/scans'].requestBody.content.'application/json'.schema.required -contains 'device_id') 'NFC request schema describes required device identity'
     Check ($documented['POST /api/employees/import/commit'].requestBody.content.'application/json'.schema.required -contains 'import_id') 'Excel commit documents idempotent import identity'
     $credentials = Get-Content -Raw $credentialsFile | ConvertFrom-Json
