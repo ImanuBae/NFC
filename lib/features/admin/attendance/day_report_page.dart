@@ -11,6 +11,7 @@ import '../../../core/strings.dart';
 import '../../../core/widgets/work_summary_card.dart';
 import 'attendance_models.dart';
 import 'attendance_repository.dart';
+import 'ticket_overview.dart';
 
 class SelectedDateNotifier extends Notifier<DateTime> {
   @override
@@ -235,6 +236,8 @@ class _DayReportPageState extends ConsumerState<DayReportPage> {
                                     },
                                   ),
                                 ),
+                                const SizedBox(height: 20),
+                                const TicketOverview(),
                                 const SizedBox(height: 20),
                                 LayoutBuilder(
                                   builder: (context, box) {

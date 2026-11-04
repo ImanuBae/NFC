@@ -282,6 +282,45 @@ public sealed class AttendanceOperationFilter : IOperationFilter
 
     static void DescribeResponses(OpenApiOperation operation, string key)
     {
+        if (key == "GET /api/attendance/days")
+        {
+            var sample = JsonNode.Parse($$$"""
+                {"employee_id":"{{{Id}}}","work_date":"2026-11-04","first_in":"2026-11-04T09:00:00+07:00",
+                 "last_out":"2026-11-04T12:00:00+07:00","worked_minutes":240,"completed_minutes":180,
+                 "required_minutes":480,"remaining_minutes":240,"is_in_shift":true,"missing_checkout":false,
+                 "needs_review":false,"is_late":false,"late_minutes":0,"is_early_leave":false,
+                 "expected_completion":"2026-11-04T18:00:00+07:00","last_event_id":"{{{Id}}}",
+                 "last_event_type":"check_in","last_event_at":"2026-11-04T13:00:00+07:00","last_event_source":"nfc",
+                 "sessions":[{"start":"2026-11-04T09:00:00+07:00","end":"2026-11-04T12:00:00+07:00"},
+                             {"start":"2026-11-04T13:00:00+07:00","end":null}],
+                 "employees":{"code":"NV_TEST","full_name":"Nhan vien test"}}
+                """)!.AsObject();
+            var item = Schema(sample, sample.Select(p => p.Key).ToArray());
+            foreach (var name in new[] { "first_in", "last_out", "expected_completion", "last_event_at" })
+            {
+                var field = (OpenApiSchema)item.Properties![name];
+                field.Type = JsonSchemaType.String | JsonSchemaType.Null;
+                field.Format = "date-time";
+            }
+            foreach (var name in new[] { "last_event_id", "last_event_type", "last_event_source" })
+                ((OpenApiSchema)item.Properties![name]).Type |= JsonSchemaType.Null;
+            foreach (var name in sample.Select(p => p.Key).Where(n => n.EndsWith("_minutes")))
+                ((OpenApiSchema)item.Properties![name]).Type = JsonSchemaType.Integer;
+            var session = (OpenApiSchema)((OpenApiSchema)item.Properties!["sessions"]).Items!;
+            session.Required = new HashSet<string> { "start", "end" };
+            ((OpenApiSchema)session.Properties!["start"]).Format = "date-time";
+            var end = (OpenApiSchema)session.Properties["end"];
+            end.Format = "date-time";
+            end.Type |= JsonSchemaType.Null;
+            ((OpenApiSchema)item.Properties["employees"]).Required = new HashSet<string> { "code", "full_name" };
+            operation.Responses!["200"] = new OpenApiResponse {
+                Description = "Bảng công theo ngày Việt Nam (UTC+7). Thời lượng tính bằng phút; giờ đang trong ca là tạm tính. Các mốc giờ và lượt mới nhất có thể null; sessions[].end null khi chưa có lượt ra.",
+                Content = new Dictionary<string, OpenApiMediaType> { ["application/json"] = new() {
+                    Schema = new OpenApiSchema { Type = JsonSchemaType.Array, Items = item },
+                    Example = new JsonArray(sample)
+                } }
+            };
+        }
         if (key is "GET /api/payroll/runs/{id}/export" or "GET /api/employees/import/template" or "GET /api/employees/import/{id}/credentials")
         {
             operation.Responses!["200"] = new OpenApiResponse {
@@ -297,6 +336,7 @@ public sealed class AttendanceOperationFilter : IOperationFilter
             };
         }
         BodyDoc[] samples = key switch {
+            "POST /api/payroll/close" => [Body("closed", "ID kỳ lương vừa chốt; dùng để xem chi tiết hoặc xuất Excel", $$"""{"id":"{{Id}}"}""")],
             "POST /api/scans" => [
                 Body("recorded", "Lượt chấm công được ghi nhận", $$"""{"status":"ok","event_id":"{{Id}}","type":"check_in","employee_name":"Nhan vien test","employee_code":"NV_TEST","occurred_at":"2026-11-02T09:00:00+07:00"}"""),
                 Body("duplicate", "client_scan_id đã được xử lý", """{"status":"duplicate"}"""),
@@ -325,7 +365,7 @@ public sealed class AttendanceOperationFilter : IOperationFilter
             return schema;
         }).ToList();
         operation.Responses!["200"] = new OpenApiResponse {
-            Description = "Các phản hồi thành công theo kết quả nghiệp vụ; kiểm tra status trước khi coi là đã ghi công/gửi thư.",
+            Description = key == "POST /api/payroll/close" ? "Kỳ lương đã chốt thành công; trả ID kỳ lương." : "Các phản hồi thành công theo kết quả nghiệp vụ; kiểm tra status trước khi coi là đã ghi công/gửi thư.",
             Content = new Dictionary<string, OpenApiMediaType> { ["application/json"] = new() {
                 Schema = schemas.Count == 1 ? schemas[0] : new OpenApiSchema { OneOf = schemas.Cast<IOpenApiSchema>().ToList() },
                 Examples = samples.ToDictionary(s => s.Name, s => (IOpenApiExample)new OpenApiExample { Summary = s.Summary, Value = JsonNode.Parse(s.Json) })

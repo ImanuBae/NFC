@@ -7,6 +7,7 @@ import 'package:demo_nfc/features/auth/auth_repository.dart';
 import 'package:demo_nfc/features/kiosk/device_config.dart';
 import 'package:demo_nfc/features/kiosk/sync_service.dart';
 import 'package:demo_nfc/features/business/face_camera_service.dart';
+import 'package:demo_nfc/features/business/attendance_ticket_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -100,6 +101,7 @@ void main() {
           deviceConfigProvider.overrideWithValue(mockDeviceConfig),
           faceCameraServiceProvider.overrideWithValue(biometric),
           dayReportProvider.overrideWith((ref) async => []),
+          attendanceTicketsProvider.overrideWith((ref) async => []),
         ],
       );
       addTearDown(container.dispose);
@@ -165,6 +167,7 @@ void main() {
         deviceConfigProvider.overrideWithValue(mockDeviceConfig),
         syncServiceProvider.overrideWithValue(MockSyncService()),
         dayReportProvider.overrideWith((ref) async => []),
+        attendanceTicketsProvider.overrideWith((ref) async => []),
       ],
     );
     addTearDown(container.dispose);

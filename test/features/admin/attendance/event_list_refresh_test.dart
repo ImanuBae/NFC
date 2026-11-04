@@ -9,6 +9,58 @@ import 'package:mocktail/mocktail.dart';
 class MockAttendanceRepository extends Mock implements AttendanceRepository {}
 
 void main() {
+  for (final width in [320.0, 360.0, 390.0]) {
+    for (final scale in [1.0, 1.5]) {
+      testWidgets('event cards fit width $width at text scale $scale', (
+        tester,
+      ) async {
+        tester.view.physicalSize = Size(width, 900);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final repo = MockAttendanceRepository();
+        when(() => repo.getEvents()).thenAnswer(
+          (_) async => [
+            for (final voided in [false, true])
+              AttendanceEventItem(
+                id: 'event-$voided',
+                employeeId: 'emp-1',
+                employeeCode: 'NV04',
+                employeeName: 'Trần Nguyễn Đức Trung',
+                type: voided ? 'check_out' : 'check_in',
+                occurredAt: DateTime(2026, 11, 4, 11, 7),
+                source: 'face_camera',
+                flag: 'Dữ liệu mẫu chấm công có ghi chú rất dài để kiểm tra',
+                voidedAt: voided ? DateTime(2026, 11, 4, 12) : null,
+                voidReason: voided
+                    ? 'Nhân viên quét nhầm, quản lý đã kiểm tra và hủy lượt'
+                    : null,
+              ),
+          ],
+        );
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [attendanceRepositoryProvider.overrideWithValue(repo)],
+            child: MaterialApp(
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: const EventListPage(),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.byIcon(Icons.block), findsOneWidget);
+        // The complete name remains available even when its visible text is cut.
+        expect(find.byTooltip('NV04 Trần Nguyễn Đức Trung'), findsNWidgets(2));
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
+    }
+  }
+
   testWidgets('event list automatically refreshes with the original filters', (
     tester,
   ) async {

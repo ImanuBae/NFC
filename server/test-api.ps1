@@ -177,6 +177,26 @@ try {
     Check ($documented['POST /api/business'].responses.'200'.content.'application/json'.examples.saved_account.value.PSObject.Properties.Name -eq 'id') 'Account save response matches actual ID-only payload'
     Check ($documented['POST /api/scans'].requestBody.content.'application/json'.schema.required -contains 'device_id') 'NFC request schema describes required device identity'
     Check ($documented['POST /api/employees/import/commit'].requestBody.content.'application/json'.schema.required -contains 'import_id') 'Excel commit documents idempotent import identity'
+    $daySchema=$documented['GET /api/attendance/days'].responses.'200'.content.'application/json'.schema
+    Check ($daySchema.type -eq 'array' -and $daySchema.items.properties.employee_id.format -eq 'uuid') 'Day report response describes employee rows instead of empty objects'
+    $dayFields=@('employee_id','work_date','first_in','last_out','worked_minutes','completed_minutes','required_minutes','remaining_minutes','is_in_shift','missing_checkout','needs_review','is_late','late_minutes','is_early_leave','expected_completion','last_event_id','last_event_type','last_event_at','last_event_source','sessions','employees')
+    Check (@($daySchema.items.properties.PSObject.Properties).Count -eq $dayFields.Count) 'Day report documents the full response shape'
+    foreach($field in $dayFields) {
+        Check ($daySchema.items.properties.PSObject.Properties.Name -contains $field -and $daySchema.items.required -contains $field) "Day report documents required wire field $field"
+    }
+    foreach($field in @('first_in','last_out','expected_completion','last_event_at')) {
+        $property=$daySchema.items.properties.$field
+        Check ($property.format -eq 'date-time' -and ($property.nullable -or $property.type -contains 'null')) "Day report documents nullable timestamp $field"
+    }
+    foreach($field in @('worked_minutes','completed_minutes','required_minutes','remaining_minutes','late_minutes')) {
+        Check ($daySchema.items.properties.$field.type -eq 'integer') "Day report minutes use integer schema for $field"
+    }
+    $session=$daySchema.items.properties.sessions.items
+    Check ($session.properties.start.format -eq 'date-time' -and $session.properties.end.format -eq 'date-time' -and ($session.properties.end.nullable -or $session.properties.end.type -contains 'null')) 'Day report sessions describe full timestamps and an unfinished checkout'
+    Check ($daySchema.items.properties.employees.properties.code -and $daySchema.items.properties.employees.properties.full_name) 'Day report includes employee identity for dashboard display'
+    $closedSchema=$documented['POST /api/payroll/close'].responses.'200'.content.'application/json'.schema
+    Check ($closedSchema.type -eq 'object' -and $closedSchema.properties.id.format -eq 'uuid' -and $closedSchema.required -contains 'id') 'Payroll close response documents its required run UUID'
+    Check ($documented['POST /api/payroll/close'].responses.'200'.content.'application/json'.examples.closed.value.PSObject.Properties.Name -eq 'id') 'Payroll close example matches the actual ID-only response'
     $credentials = Get-Content -Raw $credentialsFile | ConvertFrom-Json
     $admin = $credentials | Where-Object Role -eq 'admin' | Select-Object -First 1
     $kiosk = $credentials | Where-Object Role -eq 'kiosk' | Select-Object -First 1
@@ -282,6 +302,7 @@ try {
     }
     $dayRows=@(Api GET '/attendance/days?date=2025-04-02' $null $adminToken)
     $day=$dayRows | Where-Object employee_id -eq $other.id
+    Check (@(Compare-Object @($day.PSObject.Properties.Name) @($daySchema.items.properties.PSObject.Properties.Name)).Count -eq 0) 'Day report Swagger fields match the real API response exactly'
     Check ($day.worked_minutes -eq 480 -and $day.remaining_minutes -eq 0 -and $day.required_minutes -eq 480) 'Dashboard subtracts lunch and interruption and credits makeup time'
     Check ($day.sessions.Count -eq 2 -and $day.late_minutes -eq 30 -and -not $day.needs_review) 'Dashboard exposes intervals and late minutes'
     Check ($day.last_event_source -eq 'manual' -and $day.last_event_type -eq 'check_out' -and $day.last_event_id) 'Dashboard exposes latest attendance notification'
@@ -292,6 +313,7 @@ try {
     Rejected { Api GET '/attendance/days?date=2025-04-02' $null $kioskToken } 403
     Check (@(Api GET "/attendance/events?employeeId=$($other.id)&date=2025-04-02" $null $adminToken).Count -eq 4) 'Calculation preserves all original attendance events'
     $closedPayroll=Api POST '/payroll/close' @{start='2025-01-01';period='month'} $adminToken
+    Check (@(Compare-Object @($closedPayroll.PSObject.Properties.Name) @($closedSchema.properties.PSObject.Properties.Name)).Count -eq 0) 'Payroll close Swagger fields match the real API response exactly'
     $payrollExportPath="/payroll/runs/$($closedPayroll.id)/export"
     $payrollFile=Api GET $payrollExportPath $null $adminToken
     Check ($payrollFile.file_name -eq 'bang_luong_da_chot_20250101_20250131.xlsx') 'Closed payroll has an Excel download'

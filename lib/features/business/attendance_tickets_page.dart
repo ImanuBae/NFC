@@ -135,6 +135,7 @@ class AttendanceTicketsPage extends ConsumerWidget {
               label: const Text('Tạo ticket'),
             ),
       body: tickets.when(
+        skipError: true,
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(
           child: Column(
@@ -150,7 +151,10 @@ class AttendanceTicketsPage extends ConsumerWidget {
         ),
         data: (all) {
           final rows = reviewMode
-              ? all
+              ? [
+                  ...all.where((t) => t['status'] == 'pending'),
+                  ...all.where((t) => t['status'] != 'pending'),
+                ]
               : all.where((t) => t['employee_id'] == myId).toList();
           if (rows.isEmpty) {
             return const Center(child: Text('Chưa có ticket sửa công.'));

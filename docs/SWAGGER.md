@@ -114,6 +114,11 @@ và 429 khi vượt giới hạn tần suất. Phản hồi 413/429 có thể kh
 `GET /api/employees/{id}` có thể trả 204 khi không có hồ sơ, đúng hành vi null
 của Minimal API hiện tại. Các thao tác thành công hiện dùng HTTP 200.
 
+`GET /api/attendance/days` mô tả đầy đủ từng dòng bảng công: thời lượng theo
+phút, trạng thái ca, lượt mới nhất, các khoảng `sessions` và thông tin nhân viên.
+Các mốc giờ và lượt mới nhất có thể `null`; `sessions[].end` là `null` nếu chưa
+có lượt ra. `POST /api/payroll/close` trả `{ "id": "UUID kỳ lương vừa chốt" }`.
+
 Nhập Excel gửi JSON với `file_name` và `content_base64`, không dùng multipart.
 Lấy file mẫu từ `/api/employees/import/template`, giải mã base64, điền dữ liệu,
 rồi gửi file đã mã hóa base64 vào preview trước khi commit. Commit cần UUID
@@ -134,7 +139,8 @@ Script dùng database SQL Server riêng và kiểm tra mỗi route có trong tà
 schema request, mẫu business action, Bearer security và các nghiệp vụ hiện có.
 Kiểm tra còn quét toàn bộ file C# đăng ký API và lệnh gọi API trong Flutter,
 đối chiếu action nghiệp vụ, cách đặt tên snake_case, mẫu ticket/review, giới hạn
-bằng chứng, vector SFace và schema phản hồi tải file. Kết quả lần kiểm tra cập
-nhật ngày 03/11/2026: **566 kiểm tra API đạt**.
+bằng chứng, vector SFace và schema phản hồi tải file. Schema bảng công ngày và
+kết quả chốt lương còn được đối chiếu với dữ liệu API thực tế. Kết quả lần kiểm
+tra cập nhật ngày 04/11/2026: **604 kiểm tra API đạt**.
 Swagger được sinh từ endpoint thực tế; nếu thêm route mới, bổ sung mô tả trong
 `ApiDocumentation.cs` để giữ tài liệu đầy đủ.

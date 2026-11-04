@@ -79,7 +79,7 @@ class EventListPage extends ConsumerWidget {
               ref.invalidate(eventListProvider((employeeId, date)));
             },
             child: ListView.separated(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               itemCount: events.length,
               separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
@@ -104,7 +104,8 @@ class EventListPage extends ConsumerWidget {
                                   : Colors.blue[800]),
                       ),
                     ),
-                    title: Row(
+                    title: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           isCheckIn ? S.checkIn : S.checkOut,
@@ -115,15 +116,23 @@ class EventListPage extends ConsumerWidget {
                                 : null,
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        if (ev.employeeName != null)
-                          Text(
-                            '(${ev.employeeCode ?? ''} ${ev.employeeName})',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: Colors.grey,
+                        if (ev.employeeName != null) ...[
+                          const SizedBox(height: 2),
+                          Tooltip(
+                            message:
+                                '${ev.employeeCode ?? ''} ${ev.employeeName}'
+                                    .trim(),
+                            child: Text(
+                              '(${ev.employeeCode ?? ''} ${ev.employeeName})',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey,
+                              ),
                             ),
                           ),
+                        ],
                       ],
                     ),
                     subtitle: Column(
@@ -132,7 +141,9 @@ class EventListPage extends ConsumerWidget {
                         const SizedBox(height: 4),
                         Text(timeStr),
                         const SizedBox(height: 4),
-                        Row(
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -158,7 +169,6 @@ class EventListPage extends ConsumerWidget {
                               ),
                             ),
                             if (ev.flag != null && ev.flag!.isNotEmpty) ...[
-                              const SizedBox(width: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 6,
@@ -179,7 +189,6 @@ class EventListPage extends ConsumerWidget {
                               ),
                             ],
                             if (ev.isVoided) ...[
-                              const SizedBox(width: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 6,

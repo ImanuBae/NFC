@@ -1,6 +1,7 @@
 import 'package:demo_nfc/core/theme.dart';
 import 'package:demo_nfc/features/admin/admin_shell.dart';
 import 'package:demo_nfc/features/auth/auth_repository.dart';
+import 'package:demo_nfc/features/business/attendance_ticket_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,6 +21,7 @@ void main() {
           '/admin/days',
           if (role == 'admin') '/admin/employees',
           '/admin/events',
+          '/admin/tickets',
           '/admin/reports',
           if (role == 'admin') '/admin/accounts',
         ];
@@ -41,7 +43,10 @@ void main() {
         addTearDown(router.dispose);
         await tester.pumpWidget(
           ProviderScope(
-            overrides: [currentRoleProvider.overrideWith((ref) async => role)],
+            overrides: [
+              currentRoleProvider.overrideWith((ref) async => role),
+              attendanceTicketsProvider.overrideWith((ref) async => []),
+            ],
             child: MaterialApp.router(
               theme: dark ? AppTheme.darkTheme : AppTheme.lightTheme,
               routerConfig: router,

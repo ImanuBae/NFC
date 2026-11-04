@@ -4,6 +4,7 @@ import 'package:demo_nfc/core/strings.dart';
 import 'package:demo_nfc/features/admin/attendance/attendance_models.dart';
 import 'package:demo_nfc/features/admin/attendance/attendance_repository.dart';
 import 'package:demo_nfc/features/admin/attendance/day_report_page.dart';
+import 'package:demo_nfc/features/business/attendance_ticket_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -22,6 +23,7 @@ void main() {
     return ProviderScope(
       overrides: [
         attendanceRepositoryProvider.overrideWithValue(mockAttendanceRepo),
+        attendanceTicketsProvider.overrideWith((ref) async => []),
       ],
       child: const MaterialApp(home: DayReportPage()),
     );

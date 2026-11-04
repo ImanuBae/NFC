@@ -4,21 +4,66 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/strings.dart';
 import '../auth/auth_repository.dart';
+import '../business/attendance_ticket_repository.dart';
 
-class AdminShell extends ConsumerWidget {
+class AdminShell extends ConsumerStatefulWidget {
   const AdminShell({super.key, required this.child});
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AdminShell> createState() => _AdminShellState();
+}
+
+class _AdminShellState extends ConsumerState<AdminShell> {
+  final Set<String> _seenTickets = {};
+  bool _ticketsInitialized = false;
+
+  @override
+  Widget build(BuildContext context) {
     final role = ref.watch(currentRoleProvider).value;
     final admin = role == 'admin';
+    final tickets = ref.watch(attendanceTicketsProvider);
+    final pendingCount = tickets.value
+        ?.where((ticket) => ticket['status'] == 'pending')
+        .length;
+    ref.listen(attendanceTicketsProvider, (_, next) {
+      if (next.isLoading || next.hasError || !next.hasValue) return;
+      final rows = next.requireValue;
+      final fresh = rows
+          .where(
+            (ticket) =>
+                ticket['status'] == 'pending' &&
+                !_seenTickets.contains('${ticket['id']}'),
+          )
+          .toList();
+      if (_ticketsInitialized && fresh.isNotEmpty) {
+        final message = fresh.length == 1
+            ? '${fresh.first['employee_name']} vừa gửi ticket sửa công.'
+            : 'Có ${fresh.length} ticket sửa công mới từ nhân viên.';
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(message),
+              duration: const Duration(seconds: 8),
+              action: SnackBarAction(
+                label: 'Xem ticket',
+                onPressed: () => context.go('/admin/tickets'),
+              ),
+            ),
+          );
+        });
+      }
+      _seenTickets.addAll(rows.map((ticket) => '${ticket['id']}'));
+      _ticketsInitialized = true;
+    });
     final wide = MediaQuery.sizeOf(context).width >= 900;
     final location = GoRouterState.of(context).uri.path;
     final paths = [
       '/admin/days',
       if (admin) '/admin/employees',
       '/admin/events',
+      '/admin/tickets',
       '/admin/reports',
       if (admin) '/admin/accounts',
     ];
@@ -26,6 +71,7 @@ class AdminShell extends ConsumerWidget {
       'Tổng quan',
       if (admin) S.navEmployees,
       S.navEvents,
+      'Ticket sửa công',
       'Báo cáo & lương',
       if (admin) 'Tài khoản & thiết bị',
     ];
@@ -33,6 +79,7 @@ class AdminShell extends ConsumerWidget {
       'Tổng quan',
       if (admin) 'Nhân viên',
       'Lượt quét',
+      'Ticket',
       'Báo cáo',
       if (admin) 'Tài khoản',
     ];
@@ -40,6 +87,7 @@ class AdminShell extends ConsumerWidget {
       Icons.dashboard_outlined,
       if (admin) Icons.people_outline,
       Icons.history_outlined,
+      Icons.confirmation_number_outlined,
       Icons.assessment_outlined,
       if (admin) Icons.manage_accounts_outlined,
     ];
@@ -63,9 +111,15 @@ class AdminShell extends ConsumerWidget {
         ),
         actions: [
           IconButton(
-            tooltip: 'Duyệt ticket sửa công',
+            tooltip: pendingCount == null
+                ? 'Duyệt ticket sửa công'
+                : 'Duyệt ticket sửa công · $pendingCount chờ xử lý',
             onPressed: () => context.go('/admin/tickets'),
-            icon: const Icon(Icons.confirmation_number_outlined),
+            icon: Badge.count(
+              count: pendingCount ?? 0,
+              isLabelVisible: pendingCount != null && pendingCount > 0,
+              child: const Icon(Icons.confirmation_number_outlined),
+            ),
           ),
           if (admin)
             if (MediaQuery.sizeOf(context).width >= 700)
@@ -128,12 +182,12 @@ class AdminShell extends ConsumerWidget {
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(28),
                     ),
-                    child: child,
+                    child: widget.child,
                   ),
                 ),
               ],
             )
-          : child,
+          : widget.child,
       bottomNavigationBar: wide
           ? null
           : NavigationBar(

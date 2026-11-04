@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
@@ -6,9 +8,18 @@ import 'ticket_evidence.dart';
 final attendanceTicketRepositoryProvider = Provider(
   (ref) => AttendanceTicketRepository(ref.watch(apiClientProvider)),
 );
-final attendanceTicketsProvider = FutureProvider.autoDispose(
-  (ref) => ref.watch(attendanceTicketRepositoryProvider).list(),
-);
+final attendanceTicketsProvider = FutureProvider.autoDispose((ref) async {
+  final repository = ref.watch(attendanceTicketRepositoryProvider);
+  Timer? refresh;
+  ref.onDispose(() => refresh?.cancel());
+  try {
+    return await repository.list();
+  } finally {
+    if (ref.mounted) {
+      refresh = Timer(const Duration(seconds: 2), ref.invalidateSelf);
+    }
+  }
+}, retry: (_, _) => null);
 
 const ticketKinds = {
   'missing_in': 'Thiếu giờ vào',

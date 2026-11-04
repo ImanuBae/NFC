@@ -3,6 +3,7 @@ import 'package:demo_nfc/features/admin/admin_shell.dart';
 import 'package:demo_nfc/features/admin/attendance/attendance_models.dart';
 import 'package:demo_nfc/features/admin/attendance/day_report_page.dart';
 import 'package:demo_nfc/features/auth/auth_repository.dart';
+import 'package:demo_nfc/features/business/attendance_ticket_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -51,6 +52,7 @@ void main() {
           overrides: [
             currentRoleProvider.overrideWith((ref) async => 'admin'),
             dayReportProvider.overrideWith((ref) async => items),
+            attendanceTicketsProvider.overrideWith((ref) async => []),
           ],
           child: MaterialApp.router(
             theme: AppTheme.lightTheme,
@@ -70,7 +72,7 @@ void main() {
       await tester.scrollUntilVisible(
         find.widgetWithText(ChoiceChip, 'Đang làm'),
         200,
-        scrollable: find.byType(Scrollable).last,
+        scrollable: find.byType(Scrollable).first,
       );
       await tester.tap(find.widgetWithText(ChoiceChip, 'Đang làm'));
       await tester.pumpAndSettle();
